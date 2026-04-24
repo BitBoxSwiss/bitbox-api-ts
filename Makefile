@@ -12,10 +12,19 @@ lint:
 	npm run lint
 test:
 	npm test
+test-sim:
+	npm run test:sim
 build:
 	npm run build
 ci:
 	./ci.sh
+
+sandbox-dev:
+	npm run sandbox:dev
+sandbox-typecheck:
+	npm run sandbox:typecheck
+sandbox-build:
+	npm run sandbox:build
 
 proto-sync:
 	cp $(FIRMWARE_MESSAGES)/*.proto $(MESSAGES_DIR)/

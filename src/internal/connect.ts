@@ -5,8 +5,10 @@ import { FIRMWARE_CMD } from './constants.js';
 import type { LowerTransport, ReadWrite } from './read-write.js';
 import { HwwCommunication, type Info, U2fHidCommunication, U2fWsCommunication } from './hww.js';
 import { openBridge } from './transport-bridge.js';
-import { openSimulator } from './transport-simulator.js';
 import { openWebHID } from './transport-webhid.js';
+// `openSimulator` is dynamically imported below so that static browser bundlers
+// don't pull `node:net` into the library's main chunk. The simulator path is
+// Node-only and test-only.
 
 type OpenLower = (onCloseCb?: () => void) => Promise<LowerTransport>;
 type WrapCommunication = (lower: LowerTransport) => ReadWrite;
@@ -90,6 +92,7 @@ export async function connectSimulator(
   endpoint?: string,
   onCloseCb?: () => void,
 ): Promise<BitBox> {
+  const { openSimulator } = await import('./transport-simulator.js');
   const session = await openSession(
     (closeCb) => openSimulator(endpoint, closeCb),
     (lower) => new U2fHidCommunication(lower, FIRMWARE_CMD),
@@ -103,6 +106,7 @@ export async function probeSimulatorInfo(
   endpoint?: string,
   onCloseCb?: () => void,
 ): Promise<SimulatorInfoProbe> {
+  const { openSimulator } = await import('./transport-simulator.js');
   const session = await openSession(
     (closeCb) => openSimulator(endpoint, closeCb),
     (lower) => new U2fHidCommunication(lower, FIRMWARE_CMD),

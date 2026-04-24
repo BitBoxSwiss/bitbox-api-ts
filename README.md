@@ -2,6 +2,22 @@
 
 A TypeScript library to interact with BitBox hardware wallets.
 
+## Sandbox
+
+Interactive dev tool for real BitBox02 hardware (WebHID / BitBoxBridge).
+It tracks the currently wired browser flows in this repo; it is not intended
+to mirror the full library API surface as the port grows.
+
+```bash
+make sandbox-dev       # dev server at http://localhost:5173
+make sandbox-typecheck # TS check for the sandbox app
+make sandbox-build     # static bundle at sandbox/dist/
+```
+
+Simulator isn't reachable from the browser (no raw TCP); use `make test-sim`
+for simulator coverage. CI validates the sandbox with typecheck + build so it
+does not drift from the in-tree library/browser integration.
+
 ## API compatibility snapshot test
 
 `test/api-snapshot.test.ts` guards the "drop-in replacement for `bitbox-api`"

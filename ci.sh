@@ -18,6 +18,8 @@ npm run typecheck
 npm run lint
 npm test
 npm run build
+npm run sandbox:typecheck
+npm run sandbox:build
 
 # Simulator smoke test. The suite itself self-skips on non-Linux/non-x64, but
 # skipping here too avoids downloading binaries on unsupported runners.

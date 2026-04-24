@@ -4,7 +4,7 @@ import stylistic from '@stylistic/eslint-plugin';
 
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'node_modules/**', 'src/proto/gen/**'],
+    ignores: ['dist/**', 'node_modules/**', 'src/proto/gen/**', 'sandbox/**'],
   },
   eslint.configs.recommended,
   tseslint.configs.recommended,
