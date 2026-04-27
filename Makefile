@@ -4,6 +4,8 @@ FIRMWARE_MESSAGES := ../bitbox02-firmware/messages
 MESSAGES_DIR      := messages
 GEN_DIR           := src/proto/gen
 
+.PHONY: install typecheck lint test test-sim build ci sandbox-dev sandbox-typecheck sandbox-build proto-sync proto-gen proto-reset
+
 install:
 	npm ci
 typecheck:
