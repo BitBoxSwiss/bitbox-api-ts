@@ -5,7 +5,14 @@ import {
   connectBridge,
   connectWebHID,
 } from './internal/connect.js';
-import type { HwwCommunication } from './internal/hww.js';
+import type { HwwCommunication, Info } from './internal/hww.js';
+import type { NoiseConfig } from './internal/noise-config.js';
+import {
+  completePairing,
+  performHandshake,
+  type EncryptedChannel,
+  type PairingState,
+} from './internal/pairing.js';
 
 const ERROR_CODE_UNKNOWN_JS = 'unknown-js';
 const ERROR_CODE_UNSUPPORTED = 'unsupported';
@@ -305,22 +312,37 @@ export class BitBox {
    * Invokes the device unlock and pairing. After this, stop using this instance and continue
    * with the returned instance of type `PairingBitBox`.
    */
-  unlockAndPair(): Promise<PairingBitBox> {
-    return Promise.reject(notImplementedError('unlockAndPair'));
+  async unlockAndPair(): Promise<PairingBitBox> {
+    const state = BITBOX_STATE.get(this);
+    if (state === undefined) {
+      throw notImplementedError('unlockAndPair');
+    }
+    try {
+      const pairing = await performHandshake(state.hww, state.config);
+      BITBOX_STATE.delete(this);
+      return makePairingBitBox(pairing, state.close);
+    } catch (err) {
+      throw ensureError(err);
+    }
   }
 }
 
 type BitBoxState = {
   hww: HwwCommunication;
   close: () => void;
+  config: NoiseConfig;
 };
 
 const BITBOX_STATE = new WeakMap<BitBox, BitBoxState>();
 
 /** @internal */
-export function makeBitBox(hww: HwwCommunication, close: () => void): BitBox {
+export function makeBitBox(
+  hww: HwwCommunication,
+  close: () => void,
+  config: NoiseConfig,
+): BitBox {
   const bitbox = new BitBox();
-  BITBOX_STATE.set(bitbox, { hww, close });
+  BITBOX_STATE.set(bitbox, { hww, close, config });
   return bitbox;
 }
 
@@ -342,16 +364,39 @@ export class PairingBitBox {
    * establish the encrypted connection.
    */
   getPairingCode(): string | undefined {
-    return undefined;
+    return PAIRING_STATE.get(this)?.state.pairingCode;
   }
 
   /**
    * Proceed to the paired state. After this, stop using this instance and continue with the
    * returned instance of type `PairedBitBox`.
    */
-  waitConfirm(): Promise<PairedBitBox> {
-    return Promise.reject(notImplementedError('waitConfirm'));
+  async waitConfirm(): Promise<PairedBitBox> {
+    const state = PAIRING_STATE.get(this);
+    if (state === undefined) {
+      throw notImplementedError('waitConfirm');
+    }
+    try {
+      const channel = await completePairing(state.state);
+      PAIRING_STATE.delete(this);
+      return makePairedBitBox(channel, state.state.hww.info, state.close);
+    } catch (err) {
+      throw ensureError(err);
+    }
   }
+}
+
+type PairingBitBoxState = {
+  state: PairingState;
+  close: () => void;
+};
+
+const PAIRING_STATE = new WeakMap<PairingBitBox, PairingBitBoxState>();
+
+function makePairingBitBox(state: PairingState, close: () => void): PairingBitBox {
+  const pairing = new PairingBitBox();
+  PAIRING_STATE.set(pairing, { state, close });
+  return pairing;
 }
 
 /**
@@ -359,9 +404,6 @@ export class PairingBitBox {
  * receive addresses, etc.
  */
 export class PairedBitBox {
-  private _onCloseCb: OnCloseCb = undefined;
-  private _closed: boolean = false;
-
   /** No-op; retained for ABI compatibility with the wasm-bindgen output. */
   free(): void {}
 
@@ -370,13 +412,12 @@ export class PairedBitBox {
    * provided to the connect method creating the connection. Guarded against double-invocation.
    */
   close(): void {
-    if (this._closed) {
+    const state = PAIRED_STATE.get(this);
+    if (state === undefined || state.closed) {
       return;
     }
-    this._closed = true;
-    if (this._onCloseCb !== undefined) {
-      this._onCloseCb();
-    }
+    state.closed = true;
+    state.close();
   }
 
   deviceInfo(): Promise<DeviceInfo> {
@@ -385,12 +426,20 @@ export class PairedBitBox {
 
   /** Returns which product we are connected to. */
   product(): Product {
-    throw notImplementedError('product');
+    const state = PAIRED_STATE.get(this);
+    if (state === undefined) {
+      throw notImplementedError('product');
+    }
+    return state.info.product;
   }
 
   /** Returns the firmware version, e.g. "9.18.0". */
   version(): string {
-    throw notImplementedError('version');
+    const state = PAIRED_STATE.get(this);
+    if (state === undefined) {
+      throw notImplementedError('version');
+    }
+    return state.info.version;
   }
 
   /** Returns the hex-encoded 4-byte root fingerprint. */
@@ -471,7 +520,8 @@ export class PairedBitBox {
 
   /** Does this device support ETH functionality? Currently this means BitBox02 Multi. */
   ethSupported(): boolean {
-    return false;
+    const product = PAIRED_STATE.get(this)?.info.product;
+    return product === 'bitbox02-multi' || product === 'bitbox02-nova-multi';
   }
 
   ethXpub(_keypath: Keypath): Promise<string> {
@@ -546,4 +596,24 @@ export class PairedBitBox {
   bip85AppBip39(): Promise<void> {
     return Promise.reject(unsupportedError('bip85AppBip39'));
   }
+}
+
+type PairedBitBoxState = {
+  channel: EncryptedChannel;
+  info: Info;
+  close: () => void;
+  closed: boolean;
+};
+
+const PAIRED_STATE = new WeakMap<PairedBitBox, PairedBitBoxState>();
+
+/** @internal */
+export function makePairedBitBox(
+  channel: EncryptedChannel,
+  info: Info,
+  close: () => void,
+): PairedBitBox {
+  const paired = new PairedBitBox();
+  PAIRED_STATE.set(paired, { channel, info, close, closed: false });
+  return paired;
 }

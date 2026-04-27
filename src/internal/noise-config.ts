@@ -1,0 +1,186 @@
+// SPDX-License-Identifier: Apache-2.0
+
+/**
+ * Persistent state for the Noise pairing layer. Stored shape mirrors the Rust
+ * `bitbox-api` package (snake_case, byte arrays as JSON integer arrays) so that
+ * existing browser users upgrading from the WASM package keep their pairing
+ * cache.
+ * @internal
+ */
+export interface NoiseConfigData {
+  appStaticPrivkey?: Uint8Array;
+  deviceStaticPubkeys: Uint8Array[];
+}
+
+/** @internal */
+export interface NoiseConfig {
+  read(): NoiseConfigData;
+  store(data: NoiseConfigData): void;
+}
+
+/** @internal */
+export const LOCAL_STORAGE_CONFIG_KEY = 'bitbox02Config';
+
+interface SerializedShape {
+  app_static_privkey: number[] | null;
+  device_static_pubkeys: number[][];
+}
+
+function emptyConfig(): NoiseConfigData {
+  return { deviceStaticPubkeys: [] };
+}
+
+function toJson(data: NoiseConfigData): string {
+  const shape: SerializedShape = {
+    app_static_privkey:
+      data.appStaticPrivkey !== undefined ? Array.from(data.appStaticPrivkey) : null,
+    device_static_pubkeys: data.deviceStaticPubkeys.map((pk) => Array.from(pk)),
+  };
+  return JSON.stringify(shape);
+}
+
+function fromJson(text: string): NoiseConfigData {
+  const parsed = JSON.parse(text) as unknown;
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('noise config must be an object');
+  }
+  const shape = parsed as Partial<SerializedShape>;
+  const privkey = shape.app_static_privkey ?? null;
+  const pubkeys = shape.device_static_pubkeys;
+  if (!Array.isArray(pubkeys)) {
+    throw new Error('noise config device_static_pubkeys must be an array');
+  }
+  return {
+    ...(privkey === null ? {} : { appStaticPrivkey: bytesFromArray(privkey, 'app_static_privkey') }),
+    deviceStaticPubkeys: pubkeys.map((pk, index) => bytesFromArray(pk, `device_static_pubkeys[${index}]`)),
+  };
+}
+
+function bytesFromArray(value: unknown, field: string): Uint8Array {
+  if (!Array.isArray(value) || value.length !== 32) {
+    throw new Error(`noise config ${field} must be a 32-byte integer array`);
+  }
+  for (const byte of value) {
+    if (!Number.isInteger(byte) || byte < 0 || byte > 0xff) {
+      throw new Error(`noise config ${field} contains an invalid byte`);
+    }
+  }
+  return Uint8Array.from(value);
+}
+
+function eqBytes(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** @internal */
+export function containsDeviceStaticPubkey(data: NoiseConfigData, pubkey: Uint8Array): boolean {
+  return data.deviceStaticPubkeys.some((known) => eqBytes(known, pubkey));
+}
+
+/** @internal */
+export function addDeviceStaticPubkey(
+  data: NoiseConfigData,
+  pubkey: Uint8Array,
+): NoiseConfigData {
+  if (containsDeviceStaticPubkey(data, pubkey)) {
+    return data;
+  }
+  return {
+    ...(data.appStaticPrivkey === undefined ? {} : { appStaticPrivkey: data.appStaticPrivkey }),
+    deviceStaticPubkeys: [...data.deviceStaticPubkeys, new Uint8Array(pubkey)],
+  };
+}
+
+/** Always returns an empty config and never persists. @internal */
+export class NoiseConfigNoCache implements NoiseConfig {
+  read(): NoiseConfigData {
+    return emptyConfig();
+  }
+  store(_data: NoiseConfigData): void {
+    // intentionally empty
+  }
+}
+
+/**
+ * In-memory storage. Used by tests and as a non-persisting default in
+ * environments without `localStorage`.
+ * @internal
+ */
+export class InMemoryNoiseConfig implements NoiseConfig {
+  private data: NoiseConfigData = emptyConfig();
+  read(): NoiseConfigData {
+    return {
+      ...(this.data.appStaticPrivkey === undefined
+        ? {}
+        : { appStaticPrivkey: new Uint8Array(this.data.appStaticPrivkey) }),
+      deviceStaticPubkeys: this.data.deviceStaticPubkeys.map((pk) => new Uint8Array(pk)),
+    };
+  }
+  store(data: NoiseConfigData): void {
+    this.data = {
+      ...(data.appStaticPrivkey === undefined
+        ? {}
+        : { appStaticPrivkey: new Uint8Array(data.appStaticPrivkey) }),
+      deviceStaticPubkeys: data.deviceStaticPubkeys.map((pk) => new Uint8Array(pk)),
+    };
+  }
+}
+
+interface StorageLike {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+}
+
+/**
+ * Browser-default config. Uses the `Storage`-shaped `localStorage` global; on a
+ * missing key it starts from an empty config. Malformed persisted JSON and
+ * storage access failures propagate to the caller so pairing state is not
+ * silently replaced.
+ * @internal
+ */
+export class LocalStorageNoiseConfig implements NoiseConfig {
+  private readonly storage: StorageLike;
+  private readonly key: string;
+
+  constructor(storage?: StorageLike, key: string = LOCAL_STORAGE_CONFIG_KEY) {
+    const fallback = (globalThis as { localStorage?: StorageLike }).localStorage;
+    if (storage === undefined && fallback === undefined) {
+      throw new Error('localStorage is not available');
+    }
+    this.storage = storage ?? (fallback as StorageLike);
+    this.key = key;
+  }
+
+  read(): NoiseConfigData {
+    const raw = this.storage.getItem(this.key);
+    if (raw === null) {
+      return emptyConfig();
+    }
+    return fromJson(raw);
+  }
+
+  store(data: NoiseConfigData): void {
+    this.storage.setItem(this.key, toJson(data));
+  }
+}
+
+/**
+ * Default config used by browser connect functions: localStorage-backed if a
+ * `localStorage` global is present, otherwise an in-memory no-cache fallback.
+ * @internal
+ */
+export function defaultNoiseConfig(): NoiseConfig {
+  const ls = (globalThis as { localStorage?: StorageLike }).localStorage;
+  if (ls !== undefined) {
+    return new LocalStorageNoiseConfig(ls);
+  }
+  return new NoiseConfigNoCache();
+}

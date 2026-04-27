@@ -4,6 +4,7 @@ import { makeBitBox, type BitBox } from '../index.js';
 import { FIRMWARE_CMD } from './constants.js';
 import type { LowerTransport, ReadWrite } from './read-write.js';
 import { HwwCommunication, type Info, U2fHidCommunication, U2fWsCommunication } from './hww.js';
+import { defaultNoiseConfig, type NoiseConfig, NoiseConfigNoCache } from './noise-config.js';
 import { openBridge } from './transport-bridge.js';
 import { openWebHID } from './transport-webhid.js';
 // `openSimulator` is dynamically imported below so that static browser bundlers
@@ -65,7 +66,7 @@ export async function connectWebHID(onCloseCb?: () => void): Promise<BitBox> {
     (lower) => new U2fHidCommunication(lower, FIRMWARE_CMD),
     onCloseCb,
   );
-  return makeBitBox(session.hww, session.close);
+  return makeBitBox(session.hww, session.close, defaultNoiseConfig());
 }
 
 /** @internal */
@@ -75,7 +76,7 @@ export async function connectBridge(onCloseCb?: () => void): Promise<BitBox> {
     (lower) => new U2fWsCommunication(lower, FIRMWARE_CMD),
     onCloseCb,
   );
-  return makeBitBox(session.hww, session.close);
+  return makeBitBox(session.hww, session.close, defaultNoiseConfig());
 }
 
 /** @internal */
@@ -91,6 +92,7 @@ export function connectAuto(onCloseCb?: () => void): Promise<BitBox> {
 export async function connectSimulator(
   endpoint?: string,
   onCloseCb?: () => void,
+  config: NoiseConfig = new NoiseConfigNoCache(),
 ): Promise<BitBox> {
   const { openSimulator } = await import('./transport-simulator.js');
   const session = await openSession(
@@ -98,7 +100,7 @@ export async function connectSimulator(
     (lower) => new U2fHidCommunication(lower, FIRMWARE_CMD),
     onCloseCb,
   );
-  return makeBitBox(session.hww, session.close);
+  return makeBitBox(session.hww, session.close, config);
 }
 
 /** @internal */
