@@ -37,7 +37,11 @@ function defaultDeps(): BridgeDeps {
   if (f === undefined || WS === undefined) {
     throw new TransportError('bridge', 'fetch or WebSocket is not available');
   }
-  return { fetch: f, WebSocket: WS };
+  // Bind to globalThis: in browsers, `fetch` must be invoked with the realm's
+  // global as the receiver. Calling it as a method on a captured object (e.g.
+  // `deps.fetch(url)`) triggers `TypeError: Illegal invocation` before any
+  // network request is sent.
+  return { fetch: f.bind(globalThis), WebSocket: WS };
 }
 
 function sleep(ms: number): Promise<void> {
@@ -73,9 +77,11 @@ async function discoverDevicePath(deps: BridgeDeps): Promise<string> {
 
 /**
  * Open a BitBox02 via the BitBoxBridge service. Discovery polls
- * `http://localhost:8178/api/v1/devices` for exactly one device, then opens
- * a WebSocket at `ws://127.0.0.1:8178/api/v1/socket/{path}`. Behavior
- * mirrors `bitbox-api-rs/pkg/webhid.js` byte-for-byte.
+ * `http://127.0.0.1:8178/api/v1/devices` for exactly one device, then opens
+ * a WebSocket at `ws://127.0.0.1:8178/api/v1/socket/{path}`. The Rust
+ * reference uses `localhost` for the HTTP probe; we deviate to `127.0.0.1`
+ * because the bridge only binds the IPv4 loopback, and `localhost` resolves
+ * to `::1` first on systems where /etc/hosts maps both, breaking the fetch.
  * @internal
  */
 export async function openBridge(

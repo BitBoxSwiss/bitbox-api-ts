@@ -110,8 +110,8 @@ describe('openBridge', () => {
     const transport = await pending;
 
     expect(fetchMock.calls).toEqual([
-      'http://localhost:8178/api/v1/devices',
-      'http://localhost:8178/api/v1/devices',
+      'http://127.0.0.1:8178/api/v1/devices',
+      'http://127.0.0.1:8178/api/v1/devices',
     ]);
     expect(constructed!.url).toBe('ws://127.0.0.1:8178/api/v1/socket//dev/abc');
     expect(constructed!.binaryType).toBe('arraybuffer');
