@@ -2,7 +2,7 @@
 
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { connectSimulator, probeSimulatorInfo } from '../src/internal/connect.js';
+import { connectSimulator, probeSimulatorInfo } from '../src/internal/connect-simulator.js';
 import { atLeast, parseSemver } from '../src/internal/hww.js';
 import { NoiseConfigNoCache } from '../src/internal/noise-config.js';
 import {

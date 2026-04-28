@@ -20,12 +20,5 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, 'dist'),
     emptyOutDir: true,
-    rollupOptions: {
-      // `connectSimulator` is a Node-only path reached via dynamic import.
-      // Tree-shaking drops it from the sandbox bundle, but Rollup still
-      // analyses the target module and warns about `node:net`. Mark Node
-      // builtins external so the analysis stays quiet.
-      external: [/^node:/],
-    },
   },
 });
