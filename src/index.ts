@@ -5,6 +5,14 @@ import {
   connectBridge,
   connectWebHID,
 } from './internal/connect.js';
+import {
+  ethAddress as ethAddressImpl,
+  ethSign1559Transaction as ethSign1559TransactionImpl,
+  ethSignMessage as ethSignMessageImpl,
+  ethSignTransaction as ethSignTransactionImpl,
+  ethSignTypedMessage as ethSignTypedMessageImpl,
+  ethXpub as ethXpubImpl,
+} from './internal/eth/methods.js';
 import type { HwwCommunication, Info } from './internal/hww.js';
 import type { NoiseConfig } from './internal/noise-config.js';
 import {
@@ -399,6 +407,14 @@ function makePairingBitBox(state: PairingState, close: () => void): PairingBitBo
   return pairing;
 }
 
+function requirePaired(paired: PairedBitBox, method: string): PairedBitBoxState {
+  const state = PAIRED_STATE.get(paired);
+  if (state === undefined) {
+    throw notImplementedError(method);
+  }
+  return state;
+}
+
 /**
  * Paired BitBox. This is where you can invoke most API functions like getting xpubs, displaying
  * receive addresses, etc.
@@ -524,46 +540,96 @@ export class PairedBitBox {
     return product === 'bitbox02-multi' || product === 'bitbox02-nova-multi';
   }
 
-  ethXpub(_keypath: Keypath): Promise<string> {
-    return Promise.reject(notImplementedError('ethXpub'));
+  async ethXpub(keypath: Keypath): Promise<string> {
+    const state = requirePaired(this, 'ethXpub');
+    try {
+      return await ethXpubImpl(state.channel, keypath);
+    } catch (err) {
+      throw ensureError(err);
+    }
   }
 
-  ethAddress(_chain_id: bigint, _keypath: Keypath, _display: boolean): Promise<string> {
-    return Promise.reject(notImplementedError('ethAddress'));
+  async ethAddress(chain_id: bigint, keypath: Keypath, display: boolean): Promise<string> {
+    const state = requirePaired(this, 'ethAddress');
+    try {
+      return await ethAddressImpl(state.channel, chain_id, keypath, display);
+    } catch (err) {
+      throw ensureError(err);
+    }
   }
 
-  ethSignTransaction(
-    _chain_id: bigint,
-    _keypath: Keypath,
-    _tx: EthTransaction,
-    _address_case?: EthAddressCase,
+  async ethSignTransaction(
+    chain_id: bigint,
+    keypath: Keypath,
+    tx: EthTransaction,
+    address_case?: EthAddressCase,
   ): Promise<EthSignature> {
-    return Promise.reject(notImplementedError('ethSignTransaction'));
+    const state = requirePaired(this, 'ethSignTransaction');
+    try {
+      return await ethSignTransactionImpl(
+        state.channel,
+        state.info,
+        chain_id,
+        keypath,
+        tx,
+        address_case,
+      );
+    } catch (err) {
+      throw ensureError(err);
+    }
   }
 
-  ethSign1559Transaction(
-    _keypath: Keypath,
-    _tx: Eth1559Transaction,
-    _address_case?: EthAddressCase,
+  async ethSign1559Transaction(
+    keypath: Keypath,
+    tx: Eth1559Transaction,
+    address_case?: EthAddressCase,
   ): Promise<EthSignature> {
-    return Promise.reject(notImplementedError('ethSign1559Transaction'));
+    const state = requirePaired(this, 'ethSign1559Transaction');
+    try {
+      return await ethSign1559TransactionImpl(
+        state.channel,
+        state.info,
+        keypath,
+        tx,
+        address_case,
+      );
+    } catch (err) {
+      throw ensureError(err);
+    }
   }
 
-  ethSignMessage(
-    _chain_id: bigint,
-    _keypath: Keypath,
-    _msg: Uint8Array,
+  async ethSignMessage(
+    chain_id: bigint,
+    keypath: Keypath,
+    msg: Uint8Array,
   ): Promise<EthSignature> {
-    return Promise.reject(notImplementedError('ethSignMessage'));
+    const state = requirePaired(this, 'ethSignMessage');
+    try {
+      return await ethSignMessageImpl(state.channel, state.info, chain_id, keypath, msg);
+    } catch (err) {
+      throw ensureError(err);
+    }
   }
 
-  ethSignTypedMessage(
-    _chain_id: bigint,
-    _keypath: Keypath,
-    _msg: any,
-    _use_antiklepto?: boolean,
+  async ethSignTypedMessage(
+    chain_id: bigint,
+    keypath: Keypath,
+    msg: any,
+    use_antiklepto?: boolean,
   ): Promise<EthSignature> {
-    return Promise.reject(notImplementedError('ethSignTypedMessage'));
+    const state = requirePaired(this, 'ethSignTypedMessage');
+    try {
+      return await ethSignTypedMessageImpl(
+        state.channel,
+        state.info,
+        chain_id,
+        keypath,
+        msg,
+        use_antiklepto,
+      );
+    } catch (err) {
+      throw ensureError(err);
+    }
   }
 
   /** Does this device support Cardano functionality? Currently this means BitBox02 Multi. */
