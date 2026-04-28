@@ -2,61 +2,48 @@
 
 A TypeScript library to interact with BitBox hardware wallets.
 
+## Status
+
+- **Implemented:** WebHID + BitBoxBridge transports, Noise XX pairing, all
+  Ethereum methods (xpub, address, legacy/EIP-1559 tx, message,
+  EIP-712 typed message), antiklepto, tx data streaming, `ethIdentifyCase`.
+- **Stubbed `code: 'unsupported'`:** BTC, Cardano, BIP85 (permanent in
+  iteration 1).
+- **Stubbed `code: 'not-implemented'`:** `deviceInfo`, `rootFingerprint`,
+  `showMnemonic`, `changePassword`. `product()` and `version()` work.
+
+## Common commands
+
+```bash
+make install           # npm ci
+make typecheck         # tsc --noEmit
+make lint              # eslint .
+make test              # unit tests
+make test-sim          # simulator tests (Linux x64)
+make build             # ./dist
+make ci                # full CI sequence
+
+make sandbox-dev       # http://localhost:5173
+make sandbox-typecheck
+make sandbox-build
+
+make proto-sync        # copy firmware .proto files
+make proto-gen         # buf generate
+make proto-reset       # full proto clean + regen
+```
+
 ## Sandbox
 
 Interactive dev tool for real BitBox02 hardware (WebHID / BitBoxBridge).
-It tracks the currently wired browser flows in this repo; it is not intended
-to mirror the full library API surface as the port grows.
+Exercises the connection flow plus every Ethereum method. The sandbox
+aliases `bitbox-api-ts` → `../src/index.ts` so library edits hot-reload
+without a rebuild. The simulator is not reachable from the browser; use
+`make test-sim` for simulator coverage.
 
-```bash
-make sandbox-dev       # dev server at http://localhost:5173
-make sandbox-typecheck # TS check for the sandbox app
-make sandbox-build     # static bundle at sandbox/dist/
-```
+## API compatibility
 
-Simulator isn't reachable from the browser (no raw TCP); use `make test-sim`
-for simulator coverage. CI validates the sandbox with typecheck + build so it
-does not drift from the in-tree library/browser integration.
-
-## API compatibility snapshot test
-
-`test/api-snapshot.test.ts` guards the "drop-in replacement for `bitbox-api`"
-while this library is being built up to feature parity
-
-**What it does.** The test parses two `.d.ts` files with the TypeScript
-compiler API and diffs their exported shapes:
-
-- `<path-to-rust-api>/bitbox-api-rs/pkg/bitbox_api.d.ts` — the reference (WASM package).
-- `dist/index.d.ts` — this package's built output.
-
-For each side it extracts exported **functions**, **classes** (public method
-sets + signatures), and **type aliases**, then asserts that:
-
-- Function name sets match exactly, and each function's type signature matches.
-- Class name sets match exactly, and each class's public method set +
-  signatures match.
-- Every type alias the reference exposes is present in the port with the same
-  shape. The port is allowed to export *more* than the reference (our type
-  aliases are exported; the reference's aren't).
-
-Comparison is on **types only** — parameter names, JSDoc, and comment drift
-are normalized away. The test fails only on real call-site compatibility
-changes.
-
-**How to run.**
-
-```bash
-make test          # runs the full suite, including the snapshot test
-```
-
-The snapshot test depends on `dist/index.d.ts`, which is produced by a
-Vitest global setup (`test/global-setup.ts`) that runs `tsc -p
-tsconfig.build.json` once before tests start.
-
-The test is skipped automatically when the reference `.d.ts` is not
-available
-
-**When to drop it.** This file is scaffolding for the port phase. Once the
-port reaches feature parity with `bitbox-api` and is shipped stand-alone, the
-snapshot test has no further purpose and the file (plus the reference path)
-can be deleted.
+`test/api-snapshot.test.ts` diffs the built `dist/index.d.ts` against
+`../bitbox-api-rs/pkg/bitbox_api.d.ts` (functions, classes, type aliases) so
+the public surface stays drop-in compatible while the port matures.
+Skipped when the reference is absent. Will be removed once the port reaches
+feature parity.

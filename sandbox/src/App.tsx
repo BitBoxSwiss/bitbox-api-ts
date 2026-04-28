@@ -90,7 +90,7 @@ function App() {
         </Accordion>
         {bb02.ethSupported() && (
           <Accordion title="Ethereum">
-            <Ethereum />
+            <Ethereum bb02={bb02} />
           </Accordion>
         )}
       </div>
