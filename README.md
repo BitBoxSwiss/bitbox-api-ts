@@ -12,6 +12,27 @@ A TypeScript library to interact with BitBox hardware wallets.
 - **Stubbed `code: 'not-implemented'`:** `deviceInfo`, `rootFingerprint`,
   `showMnemonic`, `changePassword`. `product()` and `version()` work.
 
+## Installation
+
+`@noble/ciphers`, `@noble/curves`, `@noble/hashes` are declared as peer
+dependencies so the library doesn't perturb your existing crypto graph.
+
+- **npm 7+, pnpm 8+, yarn 2+** auto-install peer deps. `npm install bitbox-api`
+  is enough.
+- **yarn 1 (Classic)** prints peer warnings but does not install. If your
+  tree doesn't already include `@noble/*` (most wallet/Web3 stacks do, via
+  `viem`, `ethers`, or `@scure/*`), add them explicitly:
+
+  ```bash
+  yarn add @noble/ciphers @noble/curves @noble/hashes
+  ```
+
+Tested against `@noble/ciphers@1.3.0`, `@noble/curves@1.9.1`,
+`@noble/hashes@1.8.0`. The peer ranges accept lower minor versions still
+deployed in the wild (e.g. `@noble/curves@1.2.0` shipped via older
+`viem`/`ethers` builds). For full reproducibility, pin exact versions in
+your own `package.json`.
+
 ## Common commands
 
 ```bash
