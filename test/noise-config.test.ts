@@ -8,6 +8,7 @@ import {
   NoiseConfigNoCache,
   addDeviceStaticPubkey,
   containsDeviceStaticPubkey,
+  defaultNoiseConfig,
 } from '../src/internal/noise-config.js';
 
 class FakeStorage {
@@ -169,5 +170,32 @@ describe('config helpers', () => {
 
     const again = addDeviceStaticPubkey(added, pk);
     expect(again).toBe(added); // same reference: no-op when already present
+  });
+
+  it('reuses an in-memory default config when localStorage is unavailable', () => {
+    const original = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+    Object.defineProperty(globalThis, 'localStorage', {
+      value: undefined,
+      configurable: true,
+    });
+    try {
+      const a = defaultNoiseConfig();
+      const b = defaultNoiseConfig();
+      expect(a).toBe(b);
+
+      const sk = new Uint8Array(32).fill(3);
+      const pk = new Uint8Array(32).fill(4);
+      a.store({ appStaticPrivkey: sk, deviceStaticPubkeys: [pk] });
+
+      const back = b.read();
+      expect(back.appStaticPrivkey).toEqual(sk);
+      expect(back.deviceStaticPubkeys).toEqual([pk]);
+    } finally {
+      if (original === undefined) {
+        delete (globalThis as { localStorage?: unknown }).localStorage;
+      } else {
+        Object.defineProperty(globalThis, 'localStorage', original);
+      }
+    }
   });
 });

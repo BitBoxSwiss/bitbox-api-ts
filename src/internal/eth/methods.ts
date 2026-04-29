@@ -158,12 +158,31 @@ function shapeLegacyV(recid: number, chainId: bigint): Uint8Array {
   return bigUintToBytesBE(v);
 }
 
+function withJsonArray(bytes: Uint8Array): Uint8Array {
+  Object.defineProperty(bytes, 'toJSON', {
+    value: () => Array.from(bytes),
+    enumerable: false,
+    configurable: true,
+  });
+  return bytes;
+}
+
 function buildSignature(signature: Uint8Array, v: Uint8Array): EthSignature {
-  return {
-    r: signature.slice(0, 32),
-    s: signature.slice(32, 64),
-    v,
+  const out = {
+    r: withJsonArray(signature.slice(0, 32)),
+    s: withJsonArray(signature.slice(32, 64)),
+    v: withJsonArray(v),
   };
+  Object.defineProperty(out, 'toJSON', {
+    value: () => ({
+      r: Array.from(out.r),
+      s: Array.from(out.s),
+      v: Array.from(out.v),
+    }),
+    enumerable: false,
+    configurable: true,
+  });
+  return out;
 }
 
 export async function ethXpub(

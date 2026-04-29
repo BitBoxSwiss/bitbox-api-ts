@@ -173,14 +173,24 @@ export class LocalStorageNoiseConfig implements NoiseConfig {
 }
 
 /**
- * Default config used by browser connect functions: localStorage-backed if a
- * `localStorage` global is present, otherwise an in-memory no-cache fallback.
+ * Default config used by browser connect functions: localStorage-backed if
+ * available, otherwise a module-scoped in-memory fallback. The fallback keeps
+ * pairing trust for the lifetime of the current JS runtime, which avoids
+ * repeated pairing prompts in browser contexts without localStorage while still
+ * leaving explicit `NoiseConfigNoCache` available for tests and callers.
  * @internal
  */
+const fallbackDefaultConfig = new InMemoryNoiseConfig();
+
 export function defaultNoiseConfig(): NoiseConfig {
-  const ls = (globalThis as { localStorage?: StorageLike }).localStorage;
+  let ls: StorageLike | undefined;
+  try {
+    ls = (globalThis as { localStorage?: StorageLike }).localStorage;
+  } catch {
+    ls = undefined;
+  }
   if (ls !== undefined) {
     return new LocalStorageNoiseConfig(ls);
   }
-  return new NoiseConfigNoCache();
+  return fallbackDefaultConfig;
 }

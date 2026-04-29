@@ -209,6 +209,12 @@ describe('ethSignTransaction (dynamic antiklepto)', () => {
     expect(Array.from(sig.v)).toEqual([1 + 27 + 1 * 2 + 8]); // 38
     expect(sig.r.length).toBe(32);
     expect(sig.s.length).toBe(32);
+    expect(JSON.parse(JSON.stringify(sig))).toEqual({
+      r: Array.from(sig.r),
+      s: Array.from(sig.s),
+      v: Array.from(sig.v),
+    });
+    expect(JSON.parse(JSON.stringify(sig.r))).toEqual(Array.from(sig.r));
   });
 
   it('legacy v shaping: chainId=17000 recid=0 → v big-endian without leading zeros', async () => {
