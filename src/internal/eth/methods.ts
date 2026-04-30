@@ -282,7 +282,10 @@ export async function ethSign1559Transaction(
   if (useStreaming) {
     requireVersion(info, { major: 9, minor: 26, patch: 0 });
   }
-  const chainId = validateSafeUint64Number(tx.chainId, 'chainId');
+  const chainId =
+    typeof tx.chainId === 'bigint'
+      ? validateUint64(tx.chainId, 'chainId')
+      : validateSafeUint64Number(tx.chainId, 'chainId');
   validateRecipient(tx.recipient);
 
   const hostNonce = genHostNonce();

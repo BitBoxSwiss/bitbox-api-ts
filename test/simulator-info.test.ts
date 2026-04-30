@@ -2,6 +2,7 @@
 
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { BitBox } from '../src/index.js';
 import { connectSimulator, probeSimulatorInfo } from '../src/internal/connect-simulator.js';
 import { atLeast, parseSemver } from '../src/internal/hww.js';
 import { NoiseConfigNoCache } from '../src/internal/noise-config.js';
@@ -65,7 +66,8 @@ describe.skipIf(!ENABLED)('simulator info probe', () => {
 
   it('pairs over Noise and exposes paired device metadata', async () => {
     let onCloseCalls = 0;
-    const bitbox = await connectSimulator(undefined, () => { onCloseCalls += 1; }, new NoiseConfigNoCache());
+    const session = await connectSimulator(undefined, () => { onCloseCalls += 1; }, new NoiseConfigNoCache());
+    const bitbox = new BitBox(session);
     const pairing = await bitbox.unlockAndPair();
     expect(pairing.getPairingCode()).toMatch(/^[A-Z2-7]{5} [A-Z2-7]{5}\n[A-Z2-7]{5} [A-Z2-7]{5}$/);
 

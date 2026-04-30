@@ -6,9 +6,8 @@
 // the static `import` graph from the package main; nothing here is touched
 // unless a consumer explicitly imports this file.
 
-import { makeBitBox, type BitBox } from '../index.js';
 import { FIRMWARE_CMD } from './constants.js';
-import { openSession } from './connect.js';
+import { openSession, type ConnectSession } from './connect.js';
 import { type Info, U2fHidCommunication } from './hww.js';
 import { type NoiseConfig, NoiseConfigNoCache } from './noise-config.js';
 import { openSimulator } from './transport-simulator.js';
@@ -24,13 +23,13 @@ export async function connectSimulator(
   endpoint?: string,
   onCloseCb?: () => void,
   config: NoiseConfig = new NoiseConfigNoCache(),
-): Promise<BitBox> {
+): Promise<ConnectSession> {
   const session = await openSession(
     (closeCb) => openSimulator(endpoint, closeCb),
     (lower) => new U2fHidCommunication(lower, FIRMWARE_CMD),
     onCloseCb,
   );
-  return makeBitBox(session.hww, session.close, config);
+  return { ...session, config };
 }
 
 /** @internal */

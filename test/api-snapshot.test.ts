@@ -89,6 +89,24 @@ function parse(filePath: string): Shape {
   return { functions, typeAliases, classes };
 }
 
+// Source-compatible widenings: the port's signature/shape is broader than the
+// reference, but every call site that worked against the reference still
+// type-checks against the port. Each entry maps name -> accepted port shape(s).
+// PLAN.md step 7 explicitly relaxes the snapshot for these.
+const RELAXED_FUNCTIONS: Record<string, string[]> = {
+  // optional onCloseCb (callers can omit the argument)
+  bitbox02ConnectWebHID: ['(?OnCloseCb): Promise<BitBox>'],
+  bitbox02ConnectBridge: ['(?OnCloseCb): Promise<BitBox>'],
+  bitbox02ConnectAuto: ['(?OnCloseCb): Promise<BitBox>'],
+};
+
+const RELAXED_TYPE_ALIASES: Record<string, string[]> = {
+  // chainId widened to number | bigint to safely represent uint64 values
+  Eth1559Transaction: [
+    '{ chainId: number | bigint; nonce: Uint8Array; maxPriorityFeePerGas: Uint8Array; maxFeePerGas: Uint8Array; gasLimit: Uint8Array; recipient: Uint8Array; value: Uint8Array; data: Uint8Array; }',
+  ],
+};
+
 describe.skipIf(!REF_AVAILABLE)('API snapshot: exported shape matches bitbox-api-rs/pkg/bitbox_api.d.ts', () => {
   const ref = REF_AVAILABLE ? parse(REF_DTS) : { functions: new Map(), typeAliases: new Map(), classes: new Map() };
   const port = REF_AVAILABLE ? parse(PORT_DTS) : { functions: new Map(), typeAliases: new Map(), classes: new Map() };
@@ -99,7 +117,8 @@ describe.skipIf(!REF_AVAILABLE)('API snapshot: exported shape matches bitbox-api
 
   it('function signatures match', () => {
     for (const [name, refSig] of ref.functions) {
-      expect(port.functions.get(name), `function ${name}`).toBe(refSig);
+      const allowed = [refSig, ...(RELAXED_FUNCTIONS[name] ?? [])];
+      expect(allowed, `function ${name}`).toContain(port.functions.get(name));
     }
   });
 
@@ -113,7 +132,8 @@ describe.skipIf(!REF_AVAILABLE)('API snapshot: exported shape matches bitbox-api
 
   it('shared type alias shapes match', () => {
     for (const [name, refShape] of ref.typeAliases) {
-      expect(port.typeAliases.get(name), `type ${name}`).toBe(refShape);
+      const allowed = [refShape, ...(RELAXED_TYPE_ALIASES[name] ?? [])];
+      expect(allowed, `type ${name}`).toContain(port.typeAliases.get(name));
     }
   });
 

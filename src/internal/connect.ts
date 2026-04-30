@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { makeBitBox, type BitBox } from '../index.js';
 import { FIRMWARE_CMD } from './constants.js';
 import type { LowerTransport, ReadWrite } from './read-write.js';
 import { HwwCommunication, U2fHidCommunication, U2fWsCommunication } from './hww.js';
-import { defaultNoiseConfig } from './noise-config.js';
+import { defaultNoiseConfig, type NoiseConfig } from './noise-config.js';
 import { openBridge } from './transport-bridge.js';
 import { openWebHID } from './transport-webhid.js';
 
@@ -19,6 +18,16 @@ export type CreateHww = (comm: ReadWrite) => Promise<HwwCommunication>;
 export interface OpenedSession {
   hww: HwwCommunication;
   close(): void;
+}
+
+/**
+ * Session bundle returned by browser connect helpers. The public
+ * `bitbox02Connect*` wrappers in `index.ts` lift this into a `BitBox` instance.
+ * Keeping construction in `index.ts` avoids an `internal -> index.ts` cycle.
+ * @internal
+ */
+export interface ConnectSession extends OpenedSession {
+  config: NoiseConfig;
 }
 
 const createHwwDefault: CreateHww = (comm) => HwwCommunication.create(comm);
@@ -56,27 +65,27 @@ export async function openSession(
 }
 
 /** @internal */
-export async function connectWebHID(onCloseCb?: () => void): Promise<BitBox> {
+export async function connectWebHID(onCloseCb?: () => void): Promise<ConnectSession> {
   const session = await openSession(
     openWebHID,
     (lower) => new U2fHidCommunication(lower, FIRMWARE_CMD),
     onCloseCb,
   );
-  return makeBitBox(session.hww, session.close, defaultNoiseConfig());
+  return { ...session, config: defaultNoiseConfig() };
 }
 
 /** @internal */
-export async function connectBridge(onCloseCb?: () => void): Promise<BitBox> {
+export async function connectBridge(onCloseCb?: () => void): Promise<ConnectSession> {
   const session = await openSession(
     openBridge,
     (lower) => new U2fWsCommunication(lower, FIRMWARE_CMD),
     onCloseCb,
   );
-  return makeBitBox(session.hww, session.close, defaultNoiseConfig());
+  return { ...session, config: defaultNoiseConfig() };
 }
 
 /** @internal */
-export function connectAuto(onCloseCb?: () => void): Promise<BitBox> {
+export function connectAuto(onCloseCb?: () => void): Promise<ConnectSession> {
   const nav = (globalThis as { navigator?: { hid?: unknown } }).navigator;
   if (nav?.hid !== undefined) {
     return connectWebHID(onCloseCb);
