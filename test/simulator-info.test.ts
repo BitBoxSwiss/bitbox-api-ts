@@ -8,25 +8,12 @@ import { atLeast, parseSemver } from '../src/internal/hww.js';
 import { NoiseConfigNoCache } from '../src/internal/noise-config.js';
 import {
   SimulatorServer,
-  downloadSimulators,
+  binaryToRun,
   parseVersionFromFilename,
   simulatorSupported,
 } from './simulator-util.js';
 
 const ENABLED = simulatorSupported() && process.env.SKIP_SIMULATOR !== '1';
-
-async function binaryToRun(): Promise<string> {
-  const override = process.env.SIMULATOR;
-  if (override !== undefined && override.length > 0) {
-    return path.resolve(override);
-  }
-  const paths = await downloadSimulators();
-  const last = paths[paths.length - 1];
-  if (last === undefined) {
-    throw new Error('no simulators listed in test/simulators.json');
-  }
-  return last;
-}
 
 describe.skipIf(!ENABLED)('simulator info probe', () => {
   let server: SimulatorServer | undefined;

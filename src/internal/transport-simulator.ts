@@ -86,7 +86,10 @@ export async function openSimulator(
       return queue.next();
     },
     close(): void {
-      s.end();
+      // RST close (instead of graceful FIN). Avoids leaving the simulator's
+      // listening port in TIME_WAIT, which blocks the next test file from
+      // rebinding 127.0.0.1:15423 back-to-back.
+      s.resetAndDestroy();
       guard();
     },
   };

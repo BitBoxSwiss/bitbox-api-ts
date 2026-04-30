@@ -126,3 +126,20 @@ export function parseVersionFromFilename(filename: string): string {
   }
   return m[1]!;
 }
+
+/**
+ * Resolve the simulator binary to run. Honors the `SIMULATOR=/path` env override,
+ * otherwise downloads/caches the last entry from `test/simulators.json`.
+ */
+export async function binaryToRun(): Promise<string> {
+  const override = process.env.SIMULATOR;
+  if (override !== undefined && override.length > 0) {
+    return path.resolve(override);
+  }
+  const paths = await downloadSimulators();
+  const last = paths[paths.length - 1];
+  if (last === undefined) {
+    throw new Error('no simulators listed in test/simulators.json');
+  }
+  return last;
+}

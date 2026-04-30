@@ -38,6 +38,7 @@
     "@bufbuild/buf": "1.68.3",
     "@bufbuild/protoc-gen-es": "2.11.0",
     "@eslint/js": "10.0.1",
+    "@ethereumjs/rlp": "10.1.1",
     "@noble/ciphers": "1.3.0",
     "@noble/curves": "1.9.1",
     "@noble/hashes": "1.8.0",
