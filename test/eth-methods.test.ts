@@ -129,7 +129,8 @@ describe('ethAddress', () => {
   it('rejects chainId outside uint64', async () => {
     const channel = new ScriptedChannel([]);
     await expect(ethAddress(channel, 1n << 64n, [0], false)).rejects.toMatchObject({
-      code: 'invalid-input',
+      code: 'invalid-type',
+      message: 'invalid JavaScript type: chainId',
     });
   });
 });
@@ -270,7 +271,10 @@ describe('ethSignTransaction (dynamic antiklepto)', () => {
     };
     await expect(
       ethSignTransaction(channel, info('9.26.0'), 1n << 64n, [0], tx, undefined),
-    ).rejects.toMatchObject({ code: 'invalid-input' });
+    ).rejects.toMatchObject({
+      code: 'invalid-type',
+      message: 'invalid JavaScript type: chainId',
+    });
   });
 
   it('rejects a legacy v value that would overflow uint64', async () => {
@@ -333,7 +337,10 @@ describe('ethSignTransaction (dynamic antiklepto)', () => {
 
     await expect(
       ethSignTransaction(channel, info('9.26.0'), 1n, [0], tx, undefined),
-    ).rejects.toMatchObject({ code: 'invalid-input' });
+    ).rejects.toMatchObject({
+      code: 'invalid-type',
+      message: 'invalid JavaScript type: wrong type for EthTransaction',
+    });
     expect(channel.seen).toHaveLength(0);
   });
 
@@ -535,7 +542,10 @@ describe('ethSign1559Transaction', () => {
 
     await expect(
       ethSign1559Transaction(channel, info('9.26.0'), [0], tx, undefined),
-    ).rejects.toMatchObject({ code: 'invalid-input' });
+    ).rejects.toMatchObject({
+      code: 'invalid-type',
+      message: 'invalid JavaScript type: wrong type for Eth1559Transaction',
+    });
     expect(channel.seen).toHaveLength(0);
   });
 
@@ -554,7 +564,10 @@ describe('ethSign1559Transaction', () => {
 
     await expect(
       ethSign1559Transaction(channel, info('9.26.0'), [0], tx, undefined),
-    ).rejects.toMatchObject({ code: 'invalid-input' });
+    ).rejects.toMatchObject({
+      code: 'invalid-type',
+      message: 'invalid JavaScript type: wrong type for Eth1559Transaction',
+    });
     expect(channel.seen).toHaveLength(0);
   });
 });

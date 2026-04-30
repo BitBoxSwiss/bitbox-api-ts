@@ -1,21 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type { Keypath } from '../../index.js';
+import { keypathParseError } from '../errors.js';
 
 export const HARDENED = 0x80000000;
 
 const MAX_UINT32 = 0xffffffff;
 
-class KeypathParseError extends Error {
-  readonly code = 'keypath-parse';
-  constructor(message: string) {
-    super(message);
-  }
-}
-
 function parseString(input: string): number[] {
   if (!input.startsWith('m/')) {
-    throw new KeypathParseError(`failed parsing keypath: ${input}`);
+    throw keypathParseError(input);
   }
   const rest = input.slice(2);
   if (rest === '') {
@@ -31,11 +25,11 @@ function parseString(input: string): number[] {
       body = body.slice(0, -1);
     }
     if (body === '' || !/^\d+$/.test(body)) {
-      throw new KeypathParseError(`failed parsing keypath: ${input}`);
+      throw keypathParseError(input);
     }
     const n = Number(body);
     if (!Number.isInteger(n) || n < 0 || n >= HARDENED) {
-      throw new KeypathParseError(`failed parsing keypath: ${input}`);
+      throw keypathParseError(input);
     }
     out.push(n + addPrime);
   }
@@ -45,7 +39,7 @@ function parseString(input: string): number[] {
 function validateArray(input: number[]): number[] {
   for (const n of input) {
     if (!Number.isInteger(n) || n < 0 || n > MAX_UINT32) {
-      throw new KeypathParseError(`failed parsing keypath: ${n}`);
+      throw keypathParseError(String(n));
     }
   }
   return [...input];

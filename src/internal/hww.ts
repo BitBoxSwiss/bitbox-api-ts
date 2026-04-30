@@ -239,7 +239,7 @@ export class HwwCommunication {
   static async create(comm: ReadWrite, sleeper: Sleeper = DEFAULT_SLEEPER): Promise<HwwCommunication> {
     const info = await getInfo(comm);
     if (!atLeast(parseSemver(info.version), { major: 7, minor: 0, patch: 0 })) {
-      throw new TransportError('version', 'firmware >=7.0.0 required');
+      throw new TransportError('version', 'firmware version >=7.0.0 required');
     }
     return new HwwCommunication(comm, info, sleeper);
   }

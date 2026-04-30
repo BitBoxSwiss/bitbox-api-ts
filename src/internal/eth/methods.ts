@@ -38,42 +38,29 @@ import { parseKeypath } from './keypath.js';
 import { queryEth, unexpectedResponse } from './query.js';
 import { handleEthDataStreaming } from './streaming.js';
 import { requireVersion, STREAMING_THRESHOLD } from './version.js';
-
-class InvalidInputError extends Error {
-  readonly code = 'invalid-input';
-  constructor(message: string) {
-    super(message);
-  }
-}
-
-class ChainIdTooLargeError extends Error {
-  readonly code = 'chain-id-too-large';
-  constructor(chainId: bigint) {
-    super(
-      `Chain ID too large and would overflow in the computation of the v signature value: ${chainId}`,
-    );
-  }
-}
+import { chainIdTooLargeError, invalidTypeError } from '../errors.js';
 
 const UINT64_MAX = (1n << 64n) - 1n;
+const ETH_TX_DETAIL = 'wrong type for EthTransaction';
+const ETH_1559_TX_DETAIL = 'wrong type for Eth1559Transaction';
 
-function validateUint64(value: bigint, name: string): bigint {
-  if (value < 0n || value > UINT64_MAX) {
-    throw new InvalidInputError(`${name} out of range`);
+function validateUint64(value: unknown, detail: string): bigint {
+  if (typeof value !== 'bigint' || value < 0n || value > UINT64_MAX) {
+    throw invalidTypeError(detail);
   }
   return value;
 }
 
-function validateSafeUint64Number(value: number, name: string): bigint {
+function validateSafeUint64Number(value: number, detail: string): bigint {
   if (!Number.isSafeInteger(value) || value < 0) {
-    throw new InvalidInputError(`${name} out of range`);
+    throw invalidTypeError(detail);
   }
-  return validateUint64(BigInt(value), name);
+  return validateUint64(BigInt(value), detail);
 }
 
-function validateRecipient(recipient: Uint8Array): void {
-  if (recipient.length !== 20) {
-    throw new InvalidInputError('recipient must be 20 bytes');
+function validateRecipient(recipient: unknown, detail: string): void {
+  if (!(recipient instanceof Uint8Array) || recipient.length !== 20) {
+    throw invalidTypeError(detail);
   }
 }
 
@@ -153,7 +140,7 @@ function unwrapDirectSignature(response: ETHResponse['response']): Uint8Array {
 function shapeLegacyV(recid: number, chainId: bigint): Uint8Array {
   const v = BigInt(recid) + 27n + chainId * 2n + 8n;
   if (v > UINT64_MAX) {
-    throw new ChainIdTooLargeError(chainId);
+    throw chainIdTooLargeError(chainId);
   }
   return bigUintToBytesBE(v);
 }
@@ -244,7 +231,7 @@ export async function ethSignTransaction(
     requireVersion(info, { major: 9, minor: 26, patch: 0 });
   }
   validateUint64(chainId, 'chainId');
-  validateRecipient(tx.recipient);
+  validateRecipient(tx.recipient, ETH_TX_DETAIL);
 
   const hostNonce = genHostNonce();
   const req = create(ETHSignRequestSchema, {
@@ -284,9 +271,9 @@ export async function ethSign1559Transaction(
   }
   const chainId =
     typeof tx.chainId === 'bigint'
-      ? validateUint64(tx.chainId, 'chainId')
-      : validateSafeUint64Number(tx.chainId, 'chainId');
-  validateRecipient(tx.recipient);
+      ? validateUint64(tx.chainId, ETH_1559_TX_DETAIL)
+      : validateSafeUint64Number(tx.chainId, ETH_1559_TX_DETAIL);
+  validateRecipient(tx.recipient, ETH_1559_TX_DETAIL);
 
   const hostNonce = genHostNonce();
   const req = create(ETHSignEIP1559RequestSchema, {

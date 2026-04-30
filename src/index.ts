@@ -7,6 +7,15 @@ import {
   type ConnectSession,
 } from './internal/connect.js';
 import {
+  CODE_INVALID_STATE,
+  CODE_NOT_IMPLEMENTED,
+  CODE_UNSUPPORTED,
+  CODE_USER_ABORT,
+  CODE_BITBOX_USER_ABORT,
+  ensureTyped,
+  toPublicError,
+} from './internal/errors.js';
+import {
   ethAddress as ethAddressImpl,
   ethSign1559Transaction as ethSign1559TransactionImpl,
   ethSignMessage as ethSignMessageImpl,
@@ -23,30 +32,23 @@ import {
   type PairingState,
 } from './internal/pairing.js';
 
-const ERROR_CODE_UNKNOWN_JS = 'unknown-js';
-const ERROR_CODE_UNSUPPORTED = 'unsupported';
-const ERROR_CODE_NOT_IMPLEMENTED = 'not-implemented';
-const ERROR_CODE_INVALID_STATE = 'invalid-state';
-const ERROR_CODE_USER_ABORT = 'user-abort';
-const ERROR_CODE_BITBOX_USER_ABORT = 'bitbox-user-abort';
-
 function unsupportedError(method: string): Error {
   return {
-    code: ERROR_CODE_UNSUPPORTED,
+    code: CODE_UNSUPPORTED,
     message: `${method} is not supported in bitbox-api-ts`,
   };
 }
 
 function notImplementedError(method: string): Error {
   return {
-    code: ERROR_CODE_NOT_IMPLEMENTED,
+    code: CODE_NOT_IMPLEMENTED,
     message: `${method} is not yet implemented in bitbox-api-ts`,
   };
 }
 
 function invalidStateError(method: string): Error {
   return {
-    code: ERROR_CODE_INVALID_STATE,
+    code: CODE_INVALID_STATE,
     message: `${method}: object is not in a usable state (uninitialized, consumed, or closed)`,
   };
 }
@@ -238,7 +240,7 @@ export async function bitbox02ConnectWebHID(onCloseCb?: OnCloseCb): Promise<BitB
   try {
     return new BitBox(await connectWebHID(onCloseCb));
   } catch (err) {
-    throw ensureError(err);
+    throw toPublicError(err);
   }
 }
 
@@ -249,7 +251,7 @@ export async function bitbox02ConnectBridge(onCloseCb?: OnCloseCb): Promise<BitB
   try {
     return new BitBox(await connectBridge(onCloseCb));
   } catch (err) {
-    throw ensureError(err);
+    throw toPublicError(err);
   }
 }
 
@@ -261,7 +263,7 @@ export async function bitbox02ConnectAuto(onCloseCb?: OnCloseCb): Promise<BitBox
   try {
     return new BitBox(await connectAuto(onCloseCb));
   } catch (err) {
-    throw ensureError(err);
+    throw toPublicError(err);
   }
 }
 
@@ -273,24 +275,12 @@ export async function bitbox02ConnectAuto(onCloseCb?: OnCloseCb): Promise<BitBox
  * err: <original> }`.
  */
 export function ensureError(err: any): Error {
-  if (
-    err !== null &&
-    typeof err === 'object' &&
-    typeof err.code === 'string' &&
-    typeof err.message === 'string'
-  ) {
-    return err as Error;
-  }
-  return {
-    code: ERROR_CODE_UNKNOWN_JS,
-    message: 'Unknown Javascript error',
-    err,
-  };
+  return ensureTyped(err);
 }
 
 /** Returns true if the user cancelled an operation. */
 export function isUserAbort(err: Error): boolean {
-  return err.code === ERROR_CODE_USER_ABORT || err.code === ERROR_CODE_BITBOX_USER_ABORT;
+  return err.code === CODE_USER_ABORT || err.code === CODE_BITBOX_USER_ABORT;
 }
 
 /**
@@ -385,7 +375,7 @@ export class BitBox {
       return makePairingBitBox(pairing, open.close);
     } catch (err) {
       bestEffortClose(open.close);
-      throw ensureError(err);
+      throw toPublicError(err);
     }
   }
 }
@@ -451,7 +441,7 @@ export class PairingBitBox {
       return makePairedBitBox(channel, open.state.hww.info, open.close);
     } catch (err) {
       bestEffortClose(open.close);
-      throw ensureError(err);
+      throw toPublicError(err);
     }
   }
 }
@@ -618,7 +608,7 @@ export class PairedBitBox {
     try {
       return await ethXpubImpl(open.channel, keypath);
     } catch (err) {
-      throw ensureError(err);
+      throw toPublicError(err);
     }
   }
 
@@ -627,7 +617,7 @@ export class PairedBitBox {
     try {
       return await ethAddressImpl(open.channel, chain_id, keypath, display);
     } catch (err) {
-      throw ensureError(err);
+      throw toPublicError(err);
     }
   }
 
@@ -648,7 +638,7 @@ export class PairedBitBox {
         address_case,
       );
     } catch (err) {
-      throw ensureError(err);
+      throw toPublicError(err);
     }
   }
 
@@ -667,7 +657,7 @@ export class PairedBitBox {
         address_case,
       );
     } catch (err) {
-      throw ensureError(err);
+      throw toPublicError(err);
     }
   }
 
@@ -680,7 +670,7 @@ export class PairedBitBox {
     try {
       return await ethSignMessageImpl(open.channel, open.info, chain_id, keypath, msg);
     } catch (err) {
-      throw ensureError(err);
+      throw toPublicError(err);
     }
   }
 
@@ -701,7 +691,7 @@ export class PairedBitBox {
         use_antiklepto,
       );
     } catch (err) {
-      throw ensureError(err);
+      throw toPublicError(err);
     }
   }
 

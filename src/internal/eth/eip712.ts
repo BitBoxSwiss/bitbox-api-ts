@@ -12,13 +12,14 @@ import {
   type ETHSignTypedMessageRequest_StructType,
   type ETHTypedMessageValueResponse,
 } from '../../proto/gen/eth_pb.js';
+import { ethTypedMessageError } from '../errors.js';
 
 export { DataType };
 
 export class TypedMessageError extends Error {
   readonly code = 'eth-typed-message';
-  constructor(message: string) {
-    super(message);
+  constructor(detail: string) {
+    super(ethTypedMessageError(detail).message);
   }
 }
 

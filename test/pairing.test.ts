@@ -183,7 +183,10 @@ describe('pairing flow', () => {
     });
 
     const state = await performHandshake(device, config);
-    await expect(completePairing(state)).rejects.toMatchObject({ code: 'noise-pairing-rejected' });
+    await expect(completePairing(state)).rejects.toMatchObject({
+      code: 'pairing-rejected',
+      message: 'pairing code rejected by user',
+    });
     expect(containsDeviceStaticPubkey(config.read(), publicKeyFromPrivateKey(deviceSk))).toBe(false);
   });
 });

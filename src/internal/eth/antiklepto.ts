@@ -2,16 +2,10 @@
 
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { sha256 } from '@noble/hashes/sha256';
+import { antikleptoError } from '../errors.js';
 
 const HOST_COMMIT_TAG = new TextEncoder().encode('s2c/ecdsa/data');
 const POINT_TWEAK_TAG = new TextEncoder().encode('s2c/ecdsa/point');
-
-class AntiKleptoError extends Error {
-  readonly code = 'antiklepto';
-  constructor(message: string) {
-    super(message);
-  }
-}
 
 export function genHostNonce(): Uint8Array {
   const out = new Uint8Array(32);
@@ -46,13 +40,13 @@ export function verifyEcdsa(
   signature: Uint8Array,
 ): void {
   if (signature.length !== 65) {
-    throw new AntiKleptoError('signature must be 65 bytes');
+    throw antikleptoError('signature must be 65 bytes');
   }
   let point;
   try {
     point = secp256k1.ProjectivePoint.fromHex(signerCommitment);
   } catch {
-    throw new AntiKleptoError('failed to parse signer commitment');
+    throw antikleptoError('failed to parse signer commitment');
   }
   const compressed = point.toRawBytes(true);
   const data = new Uint8Array(compressed.length + hostNonce.length);
@@ -61,20 +55,20 @@ export function verifyEcdsa(
   const tweak = taggedSha256(POINT_TWEAK_TAG, data);
   const tweakBig = bytesToBigIntBE(tweak);
   if (tweakBig === 0n || tweakBig >= secp256k1.CURVE.n) {
-    throw new AntiKleptoError('tweak is an invalid scalar');
+    throw antikleptoError('tweak is an invalid scalar');
   }
   let tweaked;
   try {
     tweaked = point.add(secp256k1.ProjectivePoint.BASE.multiply(tweakBig));
   } catch {
-    throw new AntiKleptoError('failed to apply tweak');
+    throw antikleptoError('failed to apply tweak');
   }
   const uncompressed = tweaked.toRawBytes(false);
   const xCoord = uncompressed.subarray(1, 33);
   const sigR = signature.subarray(0, 32);
   for (let i = 0; i < 32; i += 1) {
     if (xCoord[i] !== sigR[i]) {
-      throw new AntiKleptoError('antiklepto verification failed');
+      throw antikleptoError('antiklepto verification failed');
     }
   }
 }

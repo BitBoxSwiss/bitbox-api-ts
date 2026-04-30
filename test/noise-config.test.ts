@@ -109,7 +109,9 @@ describe('LocalStorageNoiseConfig', () => {
   it('throws when the stored JSON is malformed', () => {
     const fake = new FakeStorage();
     fake.setItem(LOCAL_STORAGE_CONFIG_KEY, '{ not json');
-    expect(() => new LocalStorageNoiseConfig(fake).read()).toThrow();
+    expect(() => new LocalStorageNoiseConfig(fake).read()).toThrow(
+      expect.objectContaining({ code: 'noise-config' }),
+    );
   });
 
   it('throws when getItem throws', () => {
@@ -119,6 +121,7 @@ describe('LocalStorageNoiseConfig', () => {
       },
       setItem(): void {},
     });
+    expect(() => c.read()).toThrow(expect.objectContaining({ code: 'noise-config' }));
     expect(() => c.read()).toThrow(/storage disabled/);
   });
 
@@ -131,6 +134,9 @@ describe('LocalStorageNoiseConfig', () => {
         device_static_pubkeys: [],
       }),
     );
+    expect(() => new LocalStorageNoiseConfig(fake).read()).toThrow(
+      expect.objectContaining({ code: 'noise-config' }),
+    );
     expect(() => new LocalStorageNoiseConfig(fake).read()).toThrow(/32-byte/);
 
     fake.setItem(
@@ -140,21 +146,40 @@ describe('LocalStorageNoiseConfig', () => {
         device_static_pubkeys: [Array.from({ length: 32 }, () => 256)],
       }),
     );
+    expect(() => new LocalStorageNoiseConfig(fake).read()).toThrow(
+      expect.objectContaining({ code: 'noise-config' }),
+    );
     expect(() => new LocalStorageNoiseConfig(fake).read()).toThrow(/invalid byte/);
   });
 
-  it('round-trips bitbox-api-rs-formatted JSON for migration compatibility', () => {
+  it('throws noise-config when storage writes fail', () => {
+    const c = new LocalStorageNoiseConfig({
+      getItem(): string | null {
+        return null;
+      },
+      setItem(): void {
+        throw new Error('quota');
+      },
+    });
+    expect(() => c.store({ deviceStaticPubkeys: [] })).toThrow(
+      expect.objectContaining({
+        code: 'noise-config',
+        message: 'noise config error: could not write to localstorage',
+      }),
+    );
+  });
+
+  it('round-trips legacy JSON for migration compatibility', () => {
     const fake = new FakeStorage();
-    // Shape exactly as serde_json produces from the Rust NoiseConfigData.
-    const rustShape = {
+    const legacyShape = {
       app_static_privkey: Array.from({ length: 32 }, (_v, i) => i),
       device_static_pubkeys: [Array.from({ length: 32 }, (_v, i) => 0x80 | i)],
     };
-    fake.setItem(LOCAL_STORAGE_CONFIG_KEY, JSON.stringify(rustShape));
+    fake.setItem(LOCAL_STORAGE_CONFIG_KEY, JSON.stringify(legacyShape));
 
     const back = new LocalStorageNoiseConfig(fake).read();
-    expect(Array.from(back.appStaticPrivkey!)).toEqual(rustShape.app_static_privkey);
-    expect(Array.from(back.deviceStaticPubkeys[0]!)).toEqual(rustShape.device_static_pubkeys[0]);
+    expect(Array.from(back.appStaticPrivkey!)).toEqual(legacyShape.app_static_privkey);
+    expect(Array.from(back.deviceStaticPubkeys[0]!)).toEqual(legacyShape.device_static_pubkeys[0]);
   });
 });
 

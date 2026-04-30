@@ -68,6 +68,7 @@ class FakeHID implements HID {
   constructor(
     private readonly existing: HIDDevice[],
     private readonly onRequest: HIDDevice[],
+    private readonly requestError?: unknown,
   ) {}
 
   getDevices(_options?: { filters: HIDFilter[] }): Promise<HIDDevice[]> {
@@ -76,6 +77,9 @@ class FakeHID implements HID {
 
   requestDevice(_options: { filters: HIDFilter[] }): Promise<HIDDevice[]> {
     this.requestCalls += 1;
+    if (this.requestError !== undefined) {
+      return Promise.reject(this.requestError);
+    }
     return Promise.resolve(this.onRequest);
   }
 
@@ -116,15 +120,20 @@ describe('openWebHID', () => {
     expect(d.opened).toBe(true);
   });
 
-  it('rejects when the productName does not match BitBox02', async () => {
+  it('rejects with webhid-cancel when the productName does not match BitBox02', async () => {
     const d = new FakeDevice({ productName: 'SomeOtherDevice' });
     const hid = new FakeHID([d], []);
-    await expect(openWebHID(undefined, hid)).rejects.toMatchObject({ code: 'webhid' });
+    await expect(openWebHID(undefined, hid)).rejects.toMatchObject({ code: 'webhid-cancel' });
   });
 
-  it('rejects when no device is returned', async () => {
+  it('rejects with webhid-cancel when no device is returned', async () => {
     const hid = new FakeHID([], []);
-    await expect(openWebHID(undefined, hid)).rejects.toMatchObject({ code: 'webhid' });
+    await expect(openWebHID(undefined, hid)).rejects.toMatchObject({ code: 'webhid-cancel' });
+  });
+
+  it('rejects with webhid-cancel when the picker is dismissed', async () => {
+    const hid = new FakeHID([], [], new Error('cancelled'));
+    await expect(openWebHID(undefined, hid)).rejects.toMatchObject({ code: 'webhid-cancel' });
   });
 
   it('delivers input reports to read()', async () => {
