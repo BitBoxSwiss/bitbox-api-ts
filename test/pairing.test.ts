@@ -9,15 +9,13 @@ import {
   performHandshake,
   type PairingTransport,
 } from '../src/internal/pairing.js';
+import { bytes, hwwFailure, hwwSuccess as success, pinned32 } from './utils.js';
 
 const OP_UNLOCK = 0x75; // 'u'
 const OP_I_CAN_HAS_HANDSHAEK = 0x68; // 'h'
 const OP_HER_COMEZ_TEH_HANDSHAEK = 0x48; // 'H'
 const OP_I_CAN_HAS_PAIRIN_VERIFICASHUN = 0x76; // 'v'
 const OP_NOISE_MSG = 0x6e; // 'n'
-
-const RESPONSE_SUCCESS = 0x00;
-const RESPONSE_FAILURE = 0x01;
 
 const EMPTY = new Uint8Array(0);
 
@@ -27,25 +25,6 @@ const INFO: Info = {
   unlocked: false,
   initialized: true,
 };
-
-function bytes(...values: number[]): Uint8Array {
-  return new Uint8Array(values);
-}
-
-function pinned32(seed: number): Uint8Array {
-  const out = new Uint8Array(32);
-  for (let i = 0; i < 32; i += 1) {
-    out[i] = (seed + i) & 0xff;
-  }
-  return out;
-}
-
-function success(payload: Uint8Array = EMPTY): Uint8Array {
-  const out = new Uint8Array(payload.length + 1);
-  out[0] = RESPONSE_SUCCESS;
-  out.set(payload, 1);
-  return out;
-}
 
 class FakePairingDevice implements PairingTransport {
   readonly info = INFO;
@@ -90,7 +69,7 @@ class FakePairingDevice implements PairingTransport {
     if (opcode === OP_I_CAN_HAS_PAIRIN_VERIFICASHUN) {
       expect(payload).toEqual(EMPTY);
       this.verifyCalls += 1;
-      return this.options.rejectVerification ? bytes(RESPONSE_FAILURE) : success();
+      return this.options.rejectVerification ? hwwFailure() : success();
     }
     if (opcode === OP_NOISE_MSG) {
       return this.handleEncryptedQuery(payload);

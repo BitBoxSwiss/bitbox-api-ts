@@ -3,9 +3,10 @@
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { sha256 } from '@noble/hashes/sha256';
 import { antikleptoError } from '../errors.js';
+import { bytesToBigIntBE, concatBytes, utf8ToBytes } from '../utils.js';
 
-const HOST_COMMIT_TAG = new TextEncoder().encode('s2c/ecdsa/data');
-const POINT_TWEAK_TAG = new TextEncoder().encode('s2c/ecdsa/point');
+const HOST_COMMIT_TAG = utf8ToBytes('s2c/ecdsa/data');
+const POINT_TWEAK_TAG = utf8ToBytes('s2c/ecdsa/point');
 
 export function genHostNonce(): Uint8Array {
   const out = new Uint8Array(32);
@@ -15,23 +16,11 @@ export function genHostNonce(): Uint8Array {
 
 export function taggedSha256(tag: Uint8Array, msg: Uint8Array): Uint8Array {
   const tagHash = sha256(tag);
-  const buf = new Uint8Array(tagHash.length * 2 + msg.length);
-  buf.set(tagHash, 0);
-  buf.set(tagHash, tagHash.length);
-  buf.set(msg, tagHash.length * 2);
-  return sha256(buf);
+  return sha256(concatBytes(tagHash, tagHash, msg));
 }
 
 export function hostCommit(hostNonce: Uint8Array): Uint8Array {
   return taggedSha256(HOST_COMMIT_TAG, hostNonce);
-}
-
-function bytesToBigIntBE(bytes: Uint8Array): bigint {
-  let n = 0n;
-  for (const b of bytes) {
-    n = (n << 8n) | BigInt(b);
-  }
-  return n;
 }
 
 export function verifyEcdsa(
@@ -49,10 +38,7 @@ export function verifyEcdsa(
     throw antikleptoError('failed to parse signer commitment');
   }
   const compressed = point.toRawBytes(true);
-  const data = new Uint8Array(compressed.length + hostNonce.length);
-  data.set(compressed, 0);
-  data.set(hostNonce, compressed.length);
-  const tweak = taggedSha256(POINT_TWEAK_TAG, data);
+  const tweak = taggedSha256(POINT_TWEAK_TAG, concatBytes(compressed, hostNonce));
   const tweakBig = bytesToBigIntBE(tweak);
   if (tweakBig === 0n || tweakBig >= secp256k1.CURVE.n) {
     throw antikleptoError('tweak is an invalid scalar');

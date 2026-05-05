@@ -4,6 +4,7 @@ import { BRIDGE_BASE_URL, BRIDGE_WS_BASE_URL } from './constants.js';
 import { MessageQueue } from './message-queue.js';
 import type { LowerTransport } from './read-write.js';
 import { TransportError, makeCloseGuard } from './read-write.js';
+import { sleep } from './utils.js';
 
 const DISCOVERY_ATTEMPTS = 10;
 const DISCOVERY_SLEEP_MS = 100;
@@ -42,10 +43,6 @@ function defaultDeps(): BridgeDeps {
   // `deps.fetch(url)`) triggers `TypeError: Illegal invocation` before any
   // network request is sent.
   return { fetch: f.bind(globalThis), WebSocket: WS };
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => { setTimeout(resolve, ms); });
 }
 
 async function discoverDevicePath(deps: BridgeDeps): Promise<string> {

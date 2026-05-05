@@ -3,6 +3,7 @@
 import type { Product } from '../index.js';
 import { PACKET_SIZE, U2fHid, U2fWs } from './u2f-framing.js';
 import { ReadWrite, TransportError, query } from './read-write.js';
+import { sleep } from './utils.js';
 
 /** @internal */
 export const HWW_REQ_NEW = 0x00;
@@ -42,11 +43,7 @@ export interface Sleeper {
 }
 
 /** @internal */
-export const DEFAULT_SLEEPER: Sleeper = {
-  sleep(ms) {
-    return new Promise((resolve) => { setTimeout(resolve, ms); });
-  },
-};
+export const DEFAULT_SLEEPER: Sleeper = { sleep };
 
 /**
  * Wraps a lower byte-pipe with U2F HID framing. Writes are encoded and

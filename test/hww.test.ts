@@ -14,10 +14,7 @@ import {
   parseSemver,
 } from '../src/internal/hww.js';
 import { ReadWrite } from '../src/internal/read-write.js';
-
-function bytes(...values: number[]): Uint8Array {
-  return new Uint8Array(values);
-}
+import { bytes } from './utils.js';
 
 /** Fake ReadWrite that scripts a deterministic response sequence. */
 class ScriptedTransport implements ReadWrite {

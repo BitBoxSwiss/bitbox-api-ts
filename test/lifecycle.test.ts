@@ -21,29 +21,14 @@ import {
   type HandshakeFinalState,
 } from '../src/internal/noise.js';
 import type { PairingTransport } from '../src/internal/pairing.js';
+import { hwwSuccess as success, pinned32 } from './utils.js';
 
 const OP_UNLOCK = 0x75;
 const OP_I_CAN_HAS_HANDSHAEK = 0x68;
 const OP_HER_COMEZ_TEH_HANDSHAEK = 0x48;
 const OP_I_CAN_HAS_PAIRIN_VERIFICASHUN = 0x76;
 const OP_NOISE_MSG = 0x6e;
-const RESPONSE_SUCCESS = 0x00;
 const EMPTY = new Uint8Array(0);
-
-function pinned32(seed: number): Uint8Array {
-  const out = new Uint8Array(32);
-  for (let i = 0; i < 32; i += 1) {
-    out[i] = (seed + i) & 0xff;
-  }
-  return out;
-}
-
-function success(payload: Uint8Array = EMPTY): Uint8Array {
-  const out = new Uint8Array(payload.length + 1);
-  out[0] = RESPONSE_SUCCESS;
-  out.set(payload, 1);
-  return out;
-}
 
 const INFO: Info = {
   version: '9.24.0',

@@ -3,6 +3,7 @@
 import { create } from '@bufbuild/protobuf';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { sha256 } from '@noble/hashes/sha256';
+import { utf8ToBytes as utf8 } from '@noble/hashes/utils';
 import { describe, expect, it } from 'vitest';
 import {
   AntiKleptoSignerCommitmentSchema,
@@ -26,28 +27,11 @@ import {
 } from '../src/internal/eth/methods.js';
 import type { Eth1559Transaction, EthTransaction } from '../src/index.js';
 import type { Info } from '../src/internal/hww.js';
+import { bytesToBigIntBE } from '../src/internal/utils.js';
 import { ScriptedChannel } from './eth-fake-channel.js';
+import { bigIntToBytes32BE } from './utils.js';
 
-const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s);
 const UINT64_MAX = (1n << 64n) - 1n;
-
-function bytesToBigIntBE(bytes: Uint8Array): bigint {
-  let n = 0n;
-  for (const b of bytes) {
-    n = (n << 8n) | BigInt(b);
-  }
-  return n;
-}
-
-function bigIntToBytes32BE(n: bigint): Uint8Array {
-  const out = new Uint8Array(32);
-  let v = n;
-  for (let i = 31; i >= 0; i -= 1) {
-    out[i] = Number(v & 0xffn);
-    v >>= 8n;
-  }
-  return out;
-}
 
 type ProjectivePoint = typeof secp256k1.ProjectivePoint.BASE;
 

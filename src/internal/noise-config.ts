@@ -68,7 +68,7 @@ function errorMessage(err: unknown, fallback: string): string {
   return err instanceof Error && err.message ? err.message : fallback;
 }
 
-function eqBytes(a: Uint8Array, b: Uint8Array): boolean {
+function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) {
     return false;
   }
@@ -82,7 +82,7 @@ function eqBytes(a: Uint8Array, b: Uint8Array): boolean {
 
 /** @internal */
 export function containsDeviceStaticPubkey(data: NoiseConfigData, pubkey: Uint8Array): boolean {
-  return data.deviceStaticPubkeys.some((known) => eqBytes(known, pubkey));
+  return data.deviceStaticPubkeys.some((known) => bytesEqual(known, pubkey));
 }
 
 /** @internal */

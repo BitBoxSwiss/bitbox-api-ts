@@ -4,9 +4,10 @@ import { x25519 } from '@noble/curves/ed25519';
 import { chacha20poly1305 } from '@noble/ciphers/chacha';
 import { sha256 } from '@noble/hashes/sha256';
 import { hkdf } from '@noble/hashes/hkdf';
+import { concatBytes, utf8ToBytes } from './utils.js';
 
 const PROTOCOL_NAME = 'Noise_XX_25519_ChaChaPoly_SHA256';
-const PROTOCOL_NAME_BYTES = new TextEncoder().encode(PROTOCOL_NAME);
+const PROTOCOL_NAME_BYTES = utf8ToBytes(PROTOCOL_NAME);
 
 const DHLEN = 32;
 const HASHLEN = 32;
@@ -30,13 +31,6 @@ function keyPairFromPrivateKey(privateKey: Uint8Array): KeyPair {
 
 function dh(local: KeyPair, remotePub: Uint8Array): Uint8Array {
   return x25519.getSharedSecret(local.privateKey, remotePub);
-}
-
-function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
-  const out = new Uint8Array(a.length + b.length);
-  out.set(a, 0);
-  out.set(b, a.length);
-  return out;
 }
 
 function nonce96(n: bigint): Uint8Array {
@@ -106,7 +100,7 @@ class SymmetricState {
   }
 
   mixHash(data: Uint8Array): void {
-    this.h = sha256(concat(this.h, data));
+    this.h = sha256(concatBytes(this.h, data));
   }
 
   mixKey(ikm: Uint8Array): void {
@@ -188,15 +182,15 @@ export class NoiseXX {
       if (tok === 'e') {
         const sk = this.fixedEphemeralPrivateKey ?? x25519.utils.randomPrivateKey();
         this.e = keyPairFromPrivateKey(sk);
-        buf = concat(buf, this.e.publicKey);
+        buf = concatBytes(buf, this.e.publicKey);
         this.symmetric.mixHash(this.e.publicKey);
       } else if (tok === 's') {
-        buf = concat(buf, this.symmetric.encryptAndHash(this.s.publicKey));
+        buf = concatBytes(buf, this.symmetric.encryptAndHash(this.s.publicKey));
       } else {
         this.symmetric.mixKey(this.tokenDh(tok));
       }
     }
-    buf = concat(buf, this.symmetric.encryptAndHash(EMPTY));
+    buf = concatBytes(buf, this.symmetric.encryptAndHash(EMPTY));
     this.patternIndex += 1;
     return buf;
   }

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
 import { describe, expect, it } from 'vitest';
 import {
   CipherState,
@@ -7,32 +8,10 @@ import {
   generateStaticPrivateKey,
   publicKeyFromPrivateKey,
 } from '../src/internal/noise.js';
+import { pinned32 } from './utils.js';
 
 const EMPTY = new Uint8Array(0);
-
-function pinned32(seed: number): Uint8Array {
-  const out = new Uint8Array(32);
-  for (let i = 0; i < 32; i += 1) {
-    out[i] = (seed + i) & 0xff;
-  }
-  return out;
-}
-
-function bytesEq(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) {
-    return false;
-  }
-  for (let i = 0; i < a.length; i += 1) {
-    if (a[i] !== b[i]) {
-      return false;
-    }
-  }
-  return true;
-}
-
-function hex(bytes: Uint8Array): string {
-  return Buffer.from(bytes).toString('hex');
-}
+const decoder = new TextDecoder();
 
 const RUST_VECTOR = {
   initPublic: '07a37cbc142093c8b755dc1b10e86cb426374ad16aa853ed0bdfc0b2b86d1c7c',
@@ -70,9 +49,9 @@ describe('NoiseXX handshake', () => {
     const a = init.finalize();
     const b = resp.finalize();
 
-    expect(bytesEq(a.hash, b.hash)).toBe(true);
-    expect(bytesEq(a.remoteStaticPubkey, publicKeyFromPrivateKey(respSk))).toBe(true);
-    expect(bytesEq(b.remoteStaticPubkey, publicKeyFromPrivateKey(initSk))).toBe(true);
+    expect(a.hash).toEqual(b.hash);
+    expect(a.remoteStaticPubkey).toEqual(publicKeyFromPrivateKey(respSk));
+    expect(b.remoteStaticPubkey).toEqual(publicKeyFromPrivateKey(initSk));
   });
 
   it('post-handshake AEAD round-trips bidirectionally', () => {
@@ -88,11 +67,11 @@ describe('NoiseXX handshake', () => {
     const a = init.finalize();
     const b = resp.finalize();
 
-    const ct1 = a.send.encryptWithAd(EMPTY, new TextEncoder().encode('hello bb02'));
-    expect(new TextDecoder().decode(b.recv.decryptWithAd(EMPTY, ct1))).toBe('hello bb02');
+    const ct1 = a.send.encryptWithAd(EMPTY, utf8ToBytes('hello bb02'));
+    expect(decoder.decode(b.recv.decryptWithAd(EMPTY, ct1))).toBe('hello bb02');
 
-    const ct2 = b.send.encryptWithAd(EMPTY, new TextEncoder().encode('hello host'));
-    expect(new TextDecoder().decode(a.recv.decryptWithAd(EMPTY, ct2))).toBe('hello host');
+    const ct2 = b.send.encryptWithAd(EMPTY, utf8ToBytes('hello host'));
+    expect(decoder.decode(a.recv.decryptWithAd(EMPTY, ct2))).toBe('hello host');
   });
 
   it('matches the Rust Noise_XX_25519_ChaChaPoly_SHA256 transcript', () => {
@@ -101,33 +80,33 @@ describe('NoiseXX handshake', () => {
     const initEph = pinned32(3);
     const respEph = pinned32(4);
 
-    expect(hex(publicKeyFromPrivateKey(initSk))).toBe(RUST_VECTOR.initPublic);
-    expect(hex(publicKeyFromPrivateKey(respSk))).toBe(RUST_VECTOR.respPublic);
+    expect(bytesToHex(publicKeyFromPrivateKey(initSk))).toBe(RUST_VECTOR.initPublic);
+    expect(bytesToHex(publicKeyFromPrivateKey(respSk))).toBe(RUST_VECTOR.respPublic);
 
     const init = new NoiseXX(true, initSk, { fixedEphemeralPrivateKey: initEph });
     const resp = new NoiseXX(false, respSk, { fixedEphemeralPrivateKey: respEph });
 
     const m1 = init.writeMessage();
-    expect(hex(m1)).toBe(RUST_VECTOR.m1);
+    expect(bytesToHex(m1)).toBe(RUST_VECTOR.m1);
     resp.readMessage(m1);
     const m2 = resp.writeMessage();
-    expect(hex(m2)).toBe(RUST_VECTOR.m2);
+    expect(bytesToHex(m2)).toBe(RUST_VECTOR.m2);
     init.readMessage(m2);
     const m3 = init.writeMessage();
-    expect(hex(m3)).toBe(RUST_VECTOR.m3);
+    expect(bytesToHex(m3)).toBe(RUST_VECTOR.m3);
     resp.readMessage(m3);
 
     const a = init.finalize();
     const b = resp.finalize();
 
-    expect(bytesEq(a.hash, b.hash)).toBe(true);
-    expect(hex(a.hash)).toBe(RUST_VECTOR.hash);
-    expect(hex(a.remoteStaticPubkey)).toBe(RUST_VECTOR.respPublic);
+    expect(a.hash).toEqual(b.hash);
+    expect(bytesToHex(a.hash)).toBe(RUST_VECTOR.hash);
+    expect(bytesToHex(a.remoteStaticPubkey)).toBe(RUST_VECTOR.respPublic);
 
     // Initiator's send cipher decrypts on the responder's recv cipher.
     const ct = a.send.encryptWithAd(EMPTY, new Uint8Array([0xde, 0xad, 0xbe, 0xef]));
-    expect(hex(ct)).toBe(RUST_VECTOR.initSendCiphertext);
-    expect(hex(b.recv.decryptWithAd(EMPTY, ct))).toBe('deadbeef');
+    expect(bytesToHex(ct)).toBe(RUST_VECTOR.initSendCiphertext);
+    expect(bytesToHex(b.recv.decryptWithAd(EMPTY, ct))).toBe('deadbeef');
   });
 
   it('rejects writeMessage when called after the handshake completes', () => {
@@ -157,8 +136,8 @@ describe('CipherState', () => {
   it('returns plaintext when no key has been mixed yet', () => {
     const c = new CipherState();
     const pt = new Uint8Array([1, 2, 3, 4]);
-    expect(bytesEq(c.encryptWithAd(EMPTY, pt), pt)).toBe(true);
-    expect(bytesEq(c.decryptWithAd(EMPTY, pt), pt)).toBe(true);
+    expect(c.encryptWithAd(EMPTY, pt)).toEqual(pt);
+    expect(c.decryptWithAd(EMPTY, pt)).toEqual(pt);
   });
 
   it('round-trips with associated data and increments nonce', () => {
@@ -166,21 +145,21 @@ describe('CipherState', () => {
     const enc = new CipherState(k);
     const dec = new CipherState(k);
 
-    const ad = new TextEncoder().encode('header');
-    const ct1 = enc.encryptWithAd(ad, new TextEncoder().encode('first'));
-    const ct2 = enc.encryptWithAd(ad, new TextEncoder().encode('second'));
+    const ad = utf8ToBytes('header');
+    const ct1 = enc.encryptWithAd(ad, utf8ToBytes('first'));
+    const ct2 = enc.encryptWithAd(ad, utf8ToBytes('second'));
 
     // Different ciphertexts because nonce has advanced.
-    expect(bytesEq(ct1, ct2)).toBe(false);
-    expect(new TextDecoder().decode(dec.decryptWithAd(ad, ct1))).toBe('first');
-    expect(new TextDecoder().decode(dec.decryptWithAd(ad, ct2))).toBe('second');
+    expect(ct1).not.toEqual(ct2);
+    expect(decoder.decode(dec.decryptWithAd(ad, ct1))).toBe('first');
+    expect(decoder.decode(dec.decryptWithAd(ad, ct2))).toBe('second');
   });
 
   it('rejects ciphertext when the associated data does not match', () => {
     const k = pinned32(10);
     const enc = new CipherState(k);
     const dec = new CipherState(k);
-    const ct = enc.encryptWithAd(new TextEncoder().encode('right'), new Uint8Array([1, 2, 3]));
-    expect(() => dec.decryptWithAd(new TextEncoder().encode('wrong'), ct)).toThrow();
+    const ct = enc.encryptWithAd(utf8ToBytes('right'), new Uint8Array([1, 2, 3]));
+    expect(() => dec.decryptWithAd(utf8ToBytes('wrong'), ct)).toThrow();
   });
 });

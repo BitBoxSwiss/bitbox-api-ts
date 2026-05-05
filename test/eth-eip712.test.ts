@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { create } from '@bufbuild/protobuf';
+import { utf8ToBytes as utf8 } from '@noble/hashes/utils';
 import { describe, expect, it } from 'vitest';
 import {
   ETHTypedMessageValueResponseSchema,
@@ -121,7 +122,7 @@ describe('encodeValue', () => {
 
   it('encodes plain bytes as UTF-8', () => {
     expect(Array.from(encodeValue(parseType('bytes', empty), 'foo'))).toEqual(
-      Array.from(new TextEncoder().encode('foo')),
+      Array.from(utf8('foo')),
     );
   });
 
@@ -182,7 +183,7 @@ describe('getValue', () => {
   it('returns domain.name', () => {
     const out = getValue(valueRequest(RootObject.DOMAIN, [0]), EIP712_MSG);
     expect(out.dataType).toBe(DataType.STRING);
-    expect(Array.from(out.value)).toEqual(Array.from(new TextEncoder().encode('Ether Mail')));
+    expect(Array.from(out.value)).toEqual(Array.from(utf8('Ether Mail')));
   });
 
   it('returns domain.chainId encoded as uint256(1) → [0x01]', () => {
@@ -193,17 +194,17 @@ describe('getValue', () => {
 
   it('returns message.from.name via nested struct path', () => {
     const out = getValue(valueRequest(RootObject.MESSAGE, [0, 0]), EIP712_MSG);
-    expect(Array.from(out.value)).toEqual(Array.from(new TextEncoder().encode('Cow')));
+    expect(Array.from(out.value)).toEqual(Array.from(utf8('Cow')));
   });
 
   it('returns nested message.attachments[0].contents', () => {
     const out = getValue(valueRequest(RootObject.MESSAGE, [3, 0, 0]), EIP712_MSG);
-    expect(Array.from(out.value)).toEqual(Array.from(new TextEncoder().encode('attachment1')));
+    expect(Array.from(out.value)).toEqual(Array.from(utf8('attachment1')));
   });
 
   it('returns nested message.attachments[1].contents', () => {
     const out = getValue(valueRequest(RootObject.MESSAGE, [3, 1, 0]), EIP712_MSG);
-    expect(Array.from(out.value)).toEqual(Array.from(new TextEncoder().encode('attachment2')));
+    expect(Array.from(out.value)).toEqual(Array.from(utf8('attachment2')));
   });
 
   it('returns the array length when the path stops at an array', () => {

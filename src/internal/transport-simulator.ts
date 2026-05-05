@@ -5,15 +5,12 @@ import { SIMULATOR_DEFAULT_ENDPOINT } from './constants.js';
 import { MessageQueue } from './message-queue.js';
 import type { LowerTransport } from './read-write.js';
 import { TransportError, makeCloseGuard } from './read-write.js';
+import { sleep } from './utils.js';
 
 // Rust's try_connect (simulator.rs:35-43) uses 200 * 10ms = 2s; Node + cold
 // sim starts occasionally exceed that, so give ourselves a 5s window.
 const CONNECT_ATTEMPTS = 500;
 const CONNECT_ATTEMPT_SLEEP_MS = 10;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => { setTimeout(resolve, ms); });
-}
 
 function attemptConnect(host: string, port: number): Promise<net.Socket> {
   return new Promise((resolve, reject) => {

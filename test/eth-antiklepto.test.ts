@@ -2,6 +2,7 @@
 
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { sha256 } from '@noble/hashes/sha256';
+import { hexToBytes, utf8ToBytes as utf8 } from '@noble/hashes/utils';
 import { describe, expect, it } from 'vitest';
 import {
   genHostNonce,
@@ -9,34 +10,8 @@ import {
   taggedSha256,
   verifyEcdsa,
 } from '../src/internal/eth/antiklepto.js';
-
-const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s);
-
-function bytesToBigIntBE(bytes: Uint8Array): bigint {
-  let n = 0n;
-  for (const b of bytes) {
-    n = (n << 8n) | BigInt(b);
-  }
-  return n;
-}
-
-function bigIntToBytes32BE(n: bigint): Uint8Array {
-  const out = new Uint8Array(32);
-  let v = n;
-  for (let i = 31; i >= 0; i -= 1) {
-    out[i] = Number(v & 0xffn);
-    v >>= 8n;
-  }
-  return out;
-}
-
-function hexToBytes(hex: string): Uint8Array {
-  const out = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < out.length; i += 1) {
-    out[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  }
-  return out;
-}
+import { bytesToBigIntBE } from '../src/internal/utils.js';
+import { bigIntToBytes32BE } from './utils.js';
 
 describe('taggedSha256', () => {
   it('matches sha256(sha256(tag) || sha256(tag) || msg)', () => {

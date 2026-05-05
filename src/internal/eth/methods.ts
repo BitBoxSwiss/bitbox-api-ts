@@ -39,6 +39,7 @@ import { queryEth, unexpectedResponse } from './query.js';
 import { handleEthDataStreaming } from './streaming.js';
 import { requireVersion, STREAMING_THRESHOLD } from './version.js';
 import { chainIdTooLargeError, invalidTypeError } from '../errors.js';
+import { bigUintToBytesBE, stripLeadingZeroes } from '../utils.js';
 
 const UINT64_MAX = (1n << 64n) - 1n;
 const ETH_TX_DETAIL = 'wrong type for EthTransaction';
@@ -74,27 +75,6 @@ function mapAddressCase(value: EthAddressCase | undefined): PbAddressCase {
     case undefined:
       return PbAddressCase.ETH_ADDRESS_CASE_MIXED;
   }
-}
-
-function removeLeadingZeroes(input: Uint8Array): Uint8Array {
-  let i = 0;
-  while (i < input.length && input[i] === 0) {
-    i += 1;
-  }
-  return input.subarray(i);
-}
-
-function bigUintToBytesBE(n: bigint): Uint8Array {
-  if (n === 0n) {
-    return new Uint8Array(0);
-  }
-  const bytes: number[] = [];
-  let v = n;
-  while (v > 0n) {
-    bytes.unshift(Number(v & 0xffn));
-    v >>= 8n;
-  }
-  return new Uint8Array(bytes);
 }
 
 function makeHostNonceCommitment(hostNonce: Uint8Array) {
@@ -237,11 +217,11 @@ export async function ethSignTransaction(
   const req = create(ETHSignRequestSchema, {
     coin: 0,
     keypath: parseKeypath(keypath),
-    nonce: removeLeadingZeroes(tx.nonce),
-    gasPrice: removeLeadingZeroes(tx.gasPrice),
-    gasLimit: removeLeadingZeroes(tx.gasLimit),
+    nonce: stripLeadingZeroes(tx.nonce),
+    gasPrice: stripLeadingZeroes(tx.gasPrice),
+    gasLimit: stripLeadingZeroes(tx.gasLimit),
     recipient: tx.recipient,
-    value: removeLeadingZeroes(tx.value),
+    value: stripLeadingZeroes(tx.value),
     data: useStreaming ? new Uint8Array() : tx.data,
     hostNonceCommitment: makeHostNonceCommitment(hostNonce),
     chainId,
@@ -279,12 +259,12 @@ export async function ethSign1559Transaction(
   const req = create(ETHSignEIP1559RequestSchema, {
     chainId,
     keypath: parseKeypath(keypath),
-    nonce: removeLeadingZeroes(tx.nonce),
-    maxPriorityFeePerGas: removeLeadingZeroes(tx.maxPriorityFeePerGas),
-    maxFeePerGas: removeLeadingZeroes(tx.maxFeePerGas),
-    gasLimit: removeLeadingZeroes(tx.gasLimit),
+    nonce: stripLeadingZeroes(tx.nonce),
+    maxPriorityFeePerGas: stripLeadingZeroes(tx.maxPriorityFeePerGas),
+    maxFeePerGas: stripLeadingZeroes(tx.maxFeePerGas),
+    gasLimit: stripLeadingZeroes(tx.gasLimit),
     recipient: tx.recipient,
-    value: removeLeadingZeroes(tx.value),
+    value: stripLeadingZeroes(tx.value),
     data: useStreaming ? new Uint8Array() : tx.data,
     hostNonceCommitment: makeHostNonceCommitment(hostNonce),
     addressCase: mapAddressCase(addressCase),
