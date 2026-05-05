@@ -1,70 +1,257 @@
 # bitbox-api-ts
 
-A TypeScript library to interact with BitBox hardware wallets.
+Pure TypeScript library for integrating BitBox02 hardware wallets in browser
+applications.
+
+`bitbox-api-ts` is source-compatible with the current `bitbox-api`
+Rust/WASM package for the implemented surface, but it does not ship WASM and
+does not require a WASM init step.
 
 ## Status
 
-- **Implemented:** WebHID + BitBoxBridge transports, Noise XX pairing, all
-  Ethereum methods (xpub, address, legacy/EIP-1559 tx, message,
-  EIP-712 typed message), antiklepto, tx data streaming, `ethIdentifyCase`.
-- **Stubbed `code: 'unsupported'`:** BTC, Cardano, BIP85 (permanent in
-  iteration 1).
-- **Stubbed `code: 'not-implemented'`:** `deviceInfo`, `rootFingerprint`,
-  `showMnemonic`, `changePassword`. `product()` and `version()` work.
+- **Implemented:** WebHID and BitBoxBridge transports, Noise XX pairing,
+  Ethereum xpub/address/signing methods, antiklepto, transaction data
+  streaming, EIP-712 typed messages, and `ethIdentifyCase()`.
+- **Stubbed with `code: 'unsupported'`:** BTC, Cardano, and BIP85 methods.
+- **Stubbed with `code: 'not-implemented'`:** `deviceInfo()`,
+  `rootFingerprint()`, `showMnemonic()`, and `changePassword()`.
+  `product()` and `version()` are implemented.
 
 ## Installation
 
-`@noble/ciphers`, `@noble/curves`, `@noble/hashes` are declared as peer
-dependencies so the library doesn't perturb your existing crypto graph.
+```bash
+npm install bitbox-api-ts
+```
 
-- **npm 7+, pnpm 8+, yarn 2+** auto-install peer deps. `npm install bitbox-api`
-  is enough.
-- **yarn 1 (Classic)** prints peer warnings but does not install. If your
-  tree doesn't already include `@noble/*` (most wallet/Web3 stacks do, via
-  `viem`, `ethers`, or `@scure/*`), add them explicitly:
+`@noble/ciphers`, `@noble/curves`, and `@noble/hashes` are peer dependencies so
+the library does not perturb the crypto dependency graph of wallet/Web3 apps.
+
+- **npm 7+** installs peer dependencies automatically.
+- **pnpm/yarn** peer handling depends on your package-manager version and
+  settings. If your dependency tree does not already include `@noble/*`, add
+  them:
 
   ```bash
   yarn add @noble/ciphers @noble/curves @noble/hashes
   ```
 
-Tested against `@noble/ciphers@1.3.0`, `@noble/curves@1.9.1`,
-`@noble/hashes@1.8.0`. The peer ranges accept lower minor versions still
-deployed in the wild (e.g. `@noble/curves@1.2.0` shipped via older
-`viem`/`ethers` builds). For full reproducibility, pin exact versions in
-your own `package.json`.
+The package is ESM-only.
 
-## Common commands
+## Migrating from `bitbox-api`
 
-```bash
-make install           # npm ci
-make typecheck         # tsc --noEmit
-make lint              # eslint .
-make test              # unit tests
-make test-sim          # simulator tests (Linux x64)
-make build             # ./dist
-make ci                # full CI sequence
+For currently implemented methods, the intended migration is just the import
+name:
 
-make sandbox-dev       # http://localhost:5173
-make sandbox-typecheck
-make sandbox-build
-
-make proto-sync        # copy firmware .proto files
-make proto-gen         # buf generate
-make proto-reset       # full proto clean + regen
+```ts
+import * as bitbox from 'bitbox-api-ts';
 ```
 
-## Sandbox
+There is no `init()` call and no WASM loader. Existing Webpack/Vite WASM plugin
+configuration from `bitbox-api` is not needed for this package.
 
-Interactive dev tool for real BitBox02 hardware (WebHID / BitBoxBridge).
-Exercises the connection flow plus every Ethereum method. The sandbox
-aliases `bitbox-api-ts` → `../src/index.ts` so library edits hot-reload
-without a rebuild. The simulator is not reachable from the browser; use
-`make test-sim` for simulator coverage.
+The first TypeScript iteration is Ethereum-focused. BTC, Cardano, BIP85, and a
+few general device helpers are still present in the public type surface for
+compatibility, but currently reject with typed errors as listed in
+[Status](#status).
 
-## API compatibility
+## Browser Requirements
 
-`test/api-snapshot.test.ts` diffs the built `dist/index.d.ts` against
-`../bitbox-api-rs/pkg/bitbox_api.d.ts` (functions, classes, type aliases) so
-the public surface stays drop-in compatible while the port matures.
-Skipped when the reference is absent. Will be removed once the port reaches
-feature parity.
+- WebHID works in Chromium-based browsers in a secure context, such as HTTPS or
+  localhost. Call the connect function from a user action, such as a button
+  click, so the browser can show the device chooser.
+- BitBoxBridge works through the local BitBoxBridge service. It is the fallback
+  used by `bitbox02ConnectAuto()` when WebHID is unavailable.
+- Pairing trust is stored in `localStorage` when available. Clearing site data
+  can require the user to confirm the pairing code again. If `localStorage` is
+  unavailable, pairing trust is kept only for the current JavaScript runtime.
+
+## Connecting and Pairing
+
+```ts
+import * as bitbox from 'bitbox-api-ts';
+
+async function connectBitBox(): Promise<bitbox.PairedBitBox | undefined> {
+  try {
+    const onClose = () => {
+      // Clear app state for this BitBox connection.
+    };
+
+    const unpaired = await bitbox.bitbox02ConnectAuto(onClose);
+    const pairing = await unpaired.unlockAndPair();
+
+    const pairingCode = pairing.getPairingCode();
+    if (pairingCode !== undefined) {
+      // Display the code and ask the user to confirm the same code on the BitBox02.
+      console.log('Pairing code:', pairingCode);
+    }
+
+    const bb02 = await pairing.waitConfirm();
+    console.log('Product:', bb02.product());
+    console.log('Firmware:', bb02.version());
+    return bb02;
+  } catch (err) {
+    const typed = bitbox.ensureError(err);
+    if (bitbox.isUserAbort(typed)) {
+      return undefined;
+    }
+    throw typed;
+  }
+}
+```
+
+`BitBox`, `PairingBitBox`, and `PairedBitBox` model a single connection flow.
+After `unlockAndPair()` succeeds, use the returned `PairingBitBox` and stop
+using the original `BitBox`. After `waitConfirm()` succeeds, use the returned
+`PairedBitBox` and stop using the `PairingBitBox`. Reusing consumed or closed
+objects throws `code: 'invalid-state'`.
+
+If `unlockAndPair()` or `waitConfirm()` fails, the underlying transport is
+closed. Reconnect before retrying.
+
+Call `bb02.close()` when your app is done with the device. `close()` is
+idempotent and invokes the `onClose` callback supplied to the connect function.
+
+## Ethereum Usage
+
+Keypaths can be strings such as `m/44'/60'/0'/0/0` or number arrays. Chain IDs
+are `bigint` for most Ethereum methods. EIP-1559 transaction objects accept
+`number | bigint` for source compatibility, but `bigint` is preferred when the
+value may exceed JavaScript's safe integer range.
+
+```ts
+const keypath = "m/44'/60'/0'/0/0";
+const chainId = 1n;
+
+if (!bb02.ethSupported()) {
+  throw new Error('This BitBox02 does not support Ethereum');
+}
+
+const xpub = await bb02.ethXpub("m/44'/60'/0'/0");
+const address = await bb02.ethAddress(chainId, keypath, true);
+```
+
+Transaction byte fields are big-endian `Uint8Array`s without a `0x` prefix.
+Pass `ethIdentifyCase()` for the optional recipient case hint when you derive
+the transaction from a hex address string.
+
+```ts
+function hexToBytes(hex: string): Uint8Array {
+  const body = hex.replace(/^0x/i, '');
+  if (body.length % 2 !== 0 || !/^[0-9a-fA-F]*$/.test(body)) {
+    throw new Error(`invalid hex length: ${hex}`);
+  }
+  const out = new Uint8Array(body.length / 2);
+  for (let i = 0; i < out.length; i += 1) {
+    out[i] = Number.parseInt(body.slice(i * 2, i * 2 + 2), 16);
+  }
+  return out;
+}
+
+const recipient = '04f264cf34440313b4a0192a352814fbe927b885';
+const signature = await bb02.ethSignTransaction(
+  1n,
+  keypath,
+  {
+    nonce: hexToBytes('1fdc'),
+    gasPrice: hexToBytes('0165a0bc00'),
+    gasLimit: hexToBytes('5208'),
+    recipient: hexToBytes(recipient),
+    value: hexToBytes('075cf1259e9c4000'),
+    data: new Uint8Array(),
+  },
+  bitbox.ethIdentifyCase(recipient),
+);
+
+console.log(signature.r, signature.s, signature.v);
+```
+
+For EIP-1559, `chainId` is part of the transaction object:
+
+```ts
+await bb02.ethSign1559Transaction(keypath, {
+  chainId: 1n,
+  nonce: hexToBytes('1fdc'),
+  maxPriorityFeePerGas: hexToBytes('3b9aca00'),
+  maxFeePerGas: hexToBytes('04a817c800'),
+  gasLimit: hexToBytes('5208'),
+  recipient: hexToBytes(recipient),
+  value: hexToBytes('075cf1259e9c4000'),
+  data: new Uint8Array(),
+});
+```
+
+Personal messages are signed with the standard Ethereum message prefix on the
+device:
+
+```ts
+const msg = new TextEncoder().encode('hello bitbox');
+await bb02.ethSignMessage(1n, keypath, msg);
+```
+
+EIP-712 typed messages are passed as JavaScript values. `use_antiklepto`
+defaults to `true` when omitted.
+
+```ts
+await bb02.ethSignTypedMessage(1n, keypath, typedData);
+```
+
+## Typed Errors
+
+All public API entry points reject with, or can be normalized to, this shape:
+
+```ts
+type Error = {
+  code: string;
+  message: string;
+  err?: any;
+};
+```
+
+Use `ensureError()` at API boundaries:
+
+```ts
+try {
+  await bb02.ethAddress(1n, keypath, true);
+} catch (err) {
+  const typed = bitbox.ensureError(err);
+  if (bitbox.isUserAbort(typed)) {
+    return;
+  }
+  console.error(typed.code, typed.message);
+}
+```
+
+Common client-facing codes include:
+
+- `could-not-open`: the device or bridge connection could not be opened.
+- `user-abort` / `bitbox-user-abort`: the user cancelled in the browser or on
+  the device.
+- `invalid-type`, `keypath-parse`, `chain-id-too-large`: invalid host inputs.
+- `communication`, `noise`, `noise-config`, `pairing-rejected`: transport,
+  pairing, or encrypted-channel failures.
+- `version`: the connected firmware is too old for the requested method.
+- `unsupported` / `not-implemented`: public compatibility methods that are not
+  wired in this TypeScript iteration.
+
+## Sandbox and Development
+
+The repository includes a browser sandbox for manual testing with real
+hardware:
+
+```bash
+make install
+make sandbox-dev
+```
+
+Open the printed Vite URL, usually `http://localhost:5173`.
+
+For build, test, simulator, protobuf, and contribution workflow details, see
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
+## API Compatibility
+
+`test/api-snapshot.test.ts` compares the built TypeScript declarations against
+`../bitbox-api-rs/pkg/bitbox_api.d.ts` when the reference checkout is present.
+The guard keeps the public surface drop-in compatible while still allowing
+deliberate source-compatible TypeScript widenings, such as optional close
+callbacks and safer `bigint` chain ID paths.

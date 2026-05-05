@@ -126,6 +126,7 @@ export type BtcSignMessageSignature = {
 
 export type BtcXpubs = string[];
 
+/** Legacy Ethereum transaction fields as unsigned big-endian bytes. */
 export type EthTransaction = {
   nonce: Uint8Array;
   gasPrice: Uint8Array;
@@ -135,6 +136,7 @@ export type EthTransaction = {
   data: Uint8Array;
 };
 
+/** EIP-1559 transaction fields as unsigned big-endian bytes. */
 export type Eth1559Transaction = {
   chainId: number | bigint;
   nonce: Uint8Array;
@@ -146,6 +148,7 @@ export type Eth1559Transaction = {
   data: Uint8Array;
 };
 
+/** Ethereum signature split into R, S, and V byte arrays. */
 export type EthSignature = {
   r: Uint8Array;
   s: Uint8Array;
@@ -227,6 +230,7 @@ export type CardanoSignTransactionResult = {
   shelleyWitnesses: CardanoShelleyWitness[];
 };
 
+/** Typed error returned by public API helpers. */
 export type Error = {
   code: string;
   message: string;
@@ -234,7 +238,10 @@ export type Error = {
 };
 
 /**
- * Connect to a BitBox02 using WebHID. WebHID is mainly supported by Chrome.
+ * Connect to a BitBox02 using WebHID.
+ *
+ * WebHID is available in Chromium-based browsers in secure contexts. Call this
+ * from a user action so the browser can show the device chooser.
  */
 export async function bitbox02ConnectWebHID(onCloseCb?: OnCloseCb): Promise<BitBox> {
   try {
@@ -245,7 +252,7 @@ export async function bitbox02ConnectWebHID(onCloseCb?: OnCloseCb): Promise<BitB
 }
 
 /**
- * Connect to a BitBox02 by using the BitBoxBridge service.
+ * Connect to a BitBox02 through the local BitBoxBridge service.
  */
 export async function bitbox02ConnectBridge(onCloseCb?: OnCloseCb): Promise<BitBox> {
   try {
@@ -256,8 +263,7 @@ export async function bitbox02ConnectBridge(onCloseCb?: OnCloseCb): Promise<BitB
 }
 
 /**
- * Connect to a BitBox02 using WebHID if available. If WebHID is not available, we attempt to
- * connect using the BitBoxBridge.
+ * Connect to a BitBox02 using WebHID when available, otherwise BitBoxBridge.
  */
 export async function bitbox02ConnectAuto(onCloseCb?: OnCloseCb): Promise<BitBox> {
   try {
@@ -268,7 +274,7 @@ export async function bitbox02ConnectAuto(onCloseCb?: OnCloseCb): Promise<BitBox
 }
 
 /**
- * Run any exception raised by this library through this function to get a typed error.
+ * Normalize any thrown value to the public typed error shape.
  *
  * If the input already looks like a typed `{ code: string, message: string }`, it is returned
  * as-is. Otherwise it is wrapped as `{ code: 'unknown-js', message: 'Unknown Javascript error',
@@ -332,7 +338,11 @@ type PairedOpen = {
 type PairedStateUnion = { kind: 'uninitialized' } | PairedOpen | { kind: 'closed' };
 
 /**
- * BitBox client. Instantiate it using `bitbox02ConnectAuto()`.
+ * Unpaired BitBox client.
+ *
+ * Create initialized instances with `bitbox02ConnectAuto()`, `bitbox02ConnectWebHID()`, or
+ * `bitbox02ConnectBridge()`. Direct constructors are retained for compatibility and create an
+ * inert object whose methods throw `code: 'invalid-state'`.
  */
 export class BitBox {
   #state: BitBoxStateUnion = { kind: 'uninitialized' };
@@ -364,6 +374,10 @@ export class BitBox {
   /**
    * Invokes the device unlock and pairing. After this, stop using this instance and continue
    * with the returned instance of type `PairingBitBox`.
+   *
+   * This consumes the `BitBox` synchronously. A second call, including a concurrent call while
+   * the first is still running, rejects with `code: 'invalid-state'`. If pairing setup fails, the
+   * transport is closed and callers must reconnect before retrying.
    */
   async unlockAndPair(): Promise<PairingBitBox> {
     const open = this.#consumeOpen();
@@ -382,7 +396,7 @@ export class BitBox {
 
 /**
  * BitBox in the pairing state. Use `getPairingCode()` to display the pairing code to the user and
- * `waitConfirm()` to proceed to the paired state.
+ * `waitConfirm()` to proceed to the paired state. Direct constructors create an inert object.
  */
 export class PairingBitBox {
   #state: PairingStateUnion = { kind: 'uninitialized' };
@@ -418,6 +432,8 @@ export class PairingBitBox {
    * If the BitBox was paired before and the pairing was persisted, the pairing step is
    * skipped. In this case, `undefined` is returned. Also in this case, call `waitConfirm()` to
    * establish the encrypted connection.
+   *
+   * Call this before `waitConfirm()`, because `waitConfirm()` consumes the pairing object.
    */
   getPairingCode(): string | undefined {
     const open = this.#readOpen();
@@ -430,6 +446,10 @@ export class PairingBitBox {
   /**
    * Proceed to the paired state. After this, stop using this instance and continue with the
    * returned instance of type `PairedBitBox`.
+   *
+   * This consumes the `PairingBitBox` synchronously. A second call, including a concurrent call
+   * while the first is still running, rejects with `code: 'invalid-state'`. If confirmation fails,
+   * the transport is closed and callers must reconnect before retrying.
    */
   async waitConfirm(): Promise<PairedBitBox> {
     const open = this.#consumeOpen();
@@ -452,7 +472,7 @@ function makePairingBitBox(state: PairingState, close: () => void): PairingBitBo
 
 /**
  * Paired BitBox. This is where you can invoke most API functions like getting xpubs, displaying
- * receive addresses, etc.
+ * receive addresses, and signing transactions. Direct constructors create an inert object.
  */
 export class PairedBitBox {
   #state: PairedStateUnion = { kind: 'uninitialized' };
@@ -487,6 +507,8 @@ export class PairedBitBox {
    * Closes the BitBox connection. This also invokes the `on_close_cb` callback which was
    * provided to the connect method creating the connection. Idempotent: calling close() on an
    * already-closed or uninitialized instance is a no-op.
+   *
+   * After `close()`, all other methods throw `code: 'invalid-state'`.
    */
   close(): void {
     const open = this.#closeOpen();
@@ -496,6 +518,7 @@ export class PairedBitBox {
     open.close();
   }
 
+  /** Not implemented in this TypeScript iteration. */
   async deviceInfo(): Promise<DeviceInfo> {
     this.#requireOpen('deviceInfo');
     throw notImplementedError('deviceInfo');
@@ -511,24 +534,25 @@ export class PairedBitBox {
     return this.#requireOpen('version').info.version;
   }
 
-  /** Returns the hex-encoded 4-byte root fingerprint. */
+  /** Not implemented in this TypeScript iteration. */
   async rootFingerprint(): Promise<string> {
     this.#requireOpen('rootFingerprint');
     throw notImplementedError('rootFingerprint');
   }
 
-  /** Show recovery words on the Bitbox. */
+  /** Not implemented in this TypeScript iteration. */
   async showMnemonic(): Promise<void> {
     this.#requireOpen('showMnemonic');
     throw notImplementedError('showMnemonic');
   }
 
-  /** Invokes the password change workflow on the device. */
+  /** Not implemented in this TypeScript iteration. */
   async changePassword(): Promise<void> {
     this.#requireOpen('changePassword');
     throw notImplementedError('changePassword');
   }
 
+  /** Compatibility stub: Bitcoin support is not implemented in this TypeScript iteration. */
   async btcXpub(
     _coin: BtcCoin,
     _keypath: Keypath,
@@ -539,6 +563,7 @@ export class PairedBitBox {
     throw unsupportedError('btcXpub');
   }
 
+  /** Compatibility stub: Bitcoin support is not implemented in this TypeScript iteration. */
   async btcXpubs(
     _coin: BtcCoin,
     _keypaths: Keypath[],
@@ -548,6 +573,7 @@ export class PairedBitBox {
     throw unsupportedError('btcXpubs');
   }
 
+  /** Compatibility stub: Bitcoin support is not implemented in this TypeScript iteration. */
   async btcIsScriptConfigRegistered(
     _coin: BtcCoin,
     _script_config: BtcScriptConfig,
@@ -557,6 +583,7 @@ export class PairedBitBox {
     throw unsupportedError('btcIsScriptConfigRegistered');
   }
 
+  /** Compatibility stub: Bitcoin support is not implemented in this TypeScript iteration. */
   async btcRegisterScriptConfig(
     _coin: BtcCoin,
     _script_config: BtcScriptConfig,
@@ -568,6 +595,7 @@ export class PairedBitBox {
     throw unsupportedError('btcRegisterScriptConfig');
   }
 
+  /** Compatibility stub: Bitcoin support is not implemented in this TypeScript iteration. */
   async btcAddress(
     _coin: BtcCoin,
     _keypath: Keypath,
@@ -578,6 +606,7 @@ export class PairedBitBox {
     throw unsupportedError('btcAddress');
   }
 
+  /** Compatibility stub: Bitcoin support is not implemented in this TypeScript iteration. */
   async btcSignPSBT(
     _coin: BtcCoin,
     _psbt: string,
@@ -588,6 +617,7 @@ export class PairedBitBox {
     throw unsupportedError('btcSignPSBT');
   }
 
+  /** Compatibility stub: Bitcoin support is not implemented in this TypeScript iteration. */
   async btcSignMessage(
     _coin: BtcCoin,
     _script_config: BtcScriptConfigWithKeypath,
@@ -597,12 +627,13 @@ export class PairedBitBox {
     throw unsupportedError('btcSignMessage');
   }
 
-  /** Does this device support ETH functionality? Currently this means BitBox02 Multi. */
+  /** Does this device support ETH functionality? Currently this means BitBox02 Multi or Nova Multi. */
   ethSupported(): boolean {
     const product = this.#requireOpen('ethSupported').info.product;
     return product === 'bitbox02-multi' || product === 'bitbox02-nova-multi';
   }
 
+  /** Query the device for an Ethereum account xpub. */
   async ethXpub(keypath: Keypath): Promise<string> {
     const open = this.#requireOpen('ethXpub');
     try {
@@ -612,6 +643,11 @@ export class PairedBitBox {
     }
   }
 
+  /**
+   * Query the device for an Ethereum address.
+   *
+   * Set `display` to `true` to require on-device confirmation.
+   */
   async ethAddress(chain_id: bigint, keypath: Keypath, display: boolean): Promise<string> {
     const open = this.#requireOpen('ethAddress');
     try {
@@ -621,6 +657,12 @@ export class PairedBitBox {
     }
   }
 
+  /**
+   * Sign a legacy Ethereum transaction.
+   *
+   * Transaction fields are unsigned big-endian byte arrays. The returned `v` includes the EIP-155
+   * chain ID offset.
+   */
   async ethSignTransaction(
     chain_id: bigint,
     keypath: Keypath,
@@ -642,6 +684,11 @@ export class PairedBitBox {
     }
   }
 
+  /**
+   * Sign an EIP-1559 type 2 Ethereum transaction.
+   *
+   * Transaction fields are unsigned big-endian byte arrays. The returned `v` is the recovery ID.
+   */
   async ethSign1559Transaction(
     keypath: Keypath,
     tx: Eth1559Transaction,
@@ -661,6 +708,12 @@ export class PairedBitBox {
     }
   }
 
+  /**
+   * Sign an Ethereum personal message.
+   *
+   * The device applies the standard Ethereum message prefix before signing. The returned `v`
+   * includes the +27 offset.
+   */
   async ethSignMessage(
     chain_id: bigint,
     keypath: Keypath,
@@ -674,6 +727,11 @@ export class PairedBitBox {
     }
   }
 
+  /**
+   * Sign an EIP-712 typed message.
+   *
+   * `use_antiklepto` defaults to `true` when omitted.
+   */
   async ethSignTypedMessage(
     chain_id: bigint,
     keypath: Keypath,
@@ -695,17 +753,19 @@ export class PairedBitBox {
     }
   }
 
-  /** Does this device support Cardano functionality? Currently this means BitBox02 Multi. */
+  /** Cardano support is not implemented in this TypeScript iteration. */
   cardanoSupported(): boolean {
     this.#requireOpen('cardanoSupported');
     return false;
   }
 
+  /** Compatibility stub: Cardano support is not implemented in this TypeScript iteration. */
   async cardanoXpubs(_keypaths: Keypath[]): Promise<CardanoXpubs> {
     this.#requireOpen('cardanoXpubs');
     throw unsupportedError('cardanoXpubs');
   }
 
+  /** Compatibility stub: Cardano support is not implemented in this TypeScript iteration. */
   async cardanoAddress(
     _network: CardanoNetwork,
     _script_config: CardanoScriptConfig,
@@ -715,6 +775,7 @@ export class PairedBitBox {
     throw unsupportedError('cardanoAddress');
   }
 
+  /** Compatibility stub: Cardano support is not implemented in this TypeScript iteration. */
   async cardanoSignTransaction(
     _transaction: CardanoTransaction,
   ): Promise<CardanoSignTransactionResult> {
@@ -724,7 +785,9 @@ export class PairedBitBox {
 
   /**
    * Invokes the BIP85-BIP39 workflow on the device, letting the user select the number of words
-   * (12, 28, 24) and an index and display a derived BIP-39 mnemonic.
+   * (12, 18, 24) and an index and display a derived BIP-39 mnemonic.
+   *
+   * Compatibility stub: BIP85 support is not implemented in this TypeScript iteration.
    */
   async bip85AppBip39(): Promise<void> {
     this.#requireOpen('bip85AppBip39');
