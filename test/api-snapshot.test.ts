@@ -7,12 +7,12 @@ import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REF_DTS = path.resolve(__dirname, '../../bitbox-api-rs/pkg/bitbox_api.d.ts');
+const REF_DTS = path.resolve(__dirname, 'fixtures/bitbox_api.d.ts');
 const PORT_DTS = path.resolve(__dirname, '../dist/index.d.ts');
 
-// The reference d.ts lives in a sibling repo that isn't present in stand-alone
-// CI checkouts. Skip the snapshot cleanly if it's missing.
-const REF_AVAILABLE = existsSync(REF_DTS);
+if (!existsSync(PORT_DTS)) {
+  throw new Error('dist/index.d.ts is missing; run npm run build before npm test');
+}
 
 type Shape = {
   functions: Map<string, string>;
@@ -107,9 +107,9 @@ const RELAXED_TYPE_ALIASES: Record<string, string[]> = {
   ],
 };
 
-describe.skipIf(!REF_AVAILABLE)('API snapshot: exported shape matches bitbox-api-rs/pkg/bitbox_api.d.ts', () => {
-  const ref = REF_AVAILABLE ? parse(REF_DTS) : { functions: new Map(), typeAliases: new Map(), classes: new Map() };
-  const port = REF_AVAILABLE ? parse(PORT_DTS) : { functions: new Map(), typeAliases: new Map(), classes: new Map() };
+describe('API snapshot: exported shape matches test/fixtures/bitbox_api.d.ts', () => {
+  const ref = parse(REF_DTS);
+  const port = parse(PORT_DTS);
 
   it('exports the same set of functions', () => {
     expect([...port.functions.keys()].sort()).toEqual([...ref.functions.keys()].sort());

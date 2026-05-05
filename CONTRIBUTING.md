@@ -34,12 +34,13 @@ make sandbox-build
 make proto-sync        # copy firmware .proto files into messages/
 make proto-gen         # regenerate TS protobuf bindings
 make proto-reset       # clean, resync, and regenerate protobuf bindings
+make api-fixture-update  # refresh the Rust/WASM API snapshot fixture
 ```
 
 `make ci` runs the same validation sequence as GitHub Actions. In CI it installs
 dependencies first, checks protobuf regeneration, runs typecheck/lint/unit
-tests/build/sandbox checks, and runs simulator tests on Linux x64 unless
-`SKIP_SIMULATOR=1` is set.
+tests/build/package/sandbox checks, and runs simulator tests on Linux x64
+unless `SKIP_SIMULATOR=1` is set.
 
 ## Simulator Tests
 
@@ -85,7 +86,7 @@ The package is intended as a drop-in TypeScript replacement for the current
 `bitbox-api` Rust/WASM npm package where methods are implemented.
 
 - Keep the exported function/class/type surface aligned with
-  `bitbox-api-rs/pkg/bitbox_api.d.ts`.
+  `../bitbox-api-rs/pkg/bitbox_api.d.ts`.
 - Only relax the API snapshot for deliberate source-compatible TypeScript
   ergonomics, such as optional callbacks or safer `bigint` input paths.
 - Public errors must keep the `{ code, message, err? }` shape. New public error
@@ -93,6 +94,15 @@ The package is intended as a drop-in TypeScript replacement for the current
   taxonomy unless there is an explicit reason to extend it.
 - BTC, Cardano, and BIP85 methods remain compatibility stubs in this iteration.
   Do not document or test them as implemented until their protocol support lands.
+
+`test/api-snapshot.test.ts` compares the built `dist/index.d.ts` against the
+checked-in `test/fixtures/bitbox_api.d.ts` fixture. To refresh the fixture,
+rebuild the Rust/WASM package in `../bitbox-api-rs` so
+`../bitbox-api-rs/pkg/bitbox_api.d.ts` exists, then run:
+
+```bash
+make api-fixture-update
+```
 
 ## Dependency Policy
 
