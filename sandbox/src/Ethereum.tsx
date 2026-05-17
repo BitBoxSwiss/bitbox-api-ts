@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { FormEvent, useState } from 'react';
-import * as bitbox from 'bitbox-api-ts';
+import * as bitbox from '@bitboxswiss/bitbox-api';
 
 import { ErrorNotification } from './ErrorNotification';
 

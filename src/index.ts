@@ -35,14 +35,14 @@ import {
 function unsupportedError(method: string): Error {
   return {
     code: CODE_UNSUPPORTED,
-    message: `${method} is not supported in bitbox-api-ts`,
+    message: `${method} is not supported in @bitboxswiss/bitbox-api`,
   };
 }
 
 function notImplementedError(method: string): Error {
   return {
     code: CODE_NOT_IMPLEMENTED,
-    message: `${method} is not yet implemented in bitbox-api-ts`,
+    message: `${method} is not yet implemented in @bitboxswiss/bitbox-api`,
   };
 }
 
