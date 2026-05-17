@@ -74,6 +74,8 @@ function mapAddressCase(value: EthAddressCase | undefined): PbAddressCase {
     case 'mixed':
     case undefined:
       return PbAddressCase.ETH_ADDRESS_CASE_MIXED;
+    default:
+      throw invalidTypeError('wrong type for EthAddressCase');
   }
 }
 
