@@ -213,4 +213,23 @@ describe('pairing flow', () => {
       code: 'noise',
     });
   });
+
+  it('maps encrypted non-success status to unexpected-response', async () => {
+    const device: PairingTransport = {
+      info: INFO,
+      async query(_msg: Uint8Array): Promise<Uint8Array> {
+        return hwwFailure();
+      },
+    };
+    const channel = makeEncryptedChannel(
+      device,
+      new CipherState(pinned32(72)),
+      new CipherState(pinned32(73)),
+    );
+
+    await expect(channel.query(bytes(0x01))).rejects.toMatchObject({
+      code: 'unexpected-response',
+      message: 'BitBox returned an unexpected response',
+    });
+  });
 });
