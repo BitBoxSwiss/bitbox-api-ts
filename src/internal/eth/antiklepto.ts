@@ -7,6 +7,8 @@ import { bytesToBigIntBE, concatBytes, utf8ToBytes } from '../utils.js';
 
 const HOST_COMMIT_TAG = utf8ToBytes('s2c/ecdsa/data');
 const POINT_TWEAK_TAG = utf8ToBytes('s2c/ecdsa/point');
+const VERIFICATION_FAILED_MESSAGE =
+  'Could not verify that the host nonce was contributed to the signature. If this happens repeatedly, the device might be attempting to leak the seed through the signature.';
 
 export function genHostNonce(): Uint8Array {
   const out = new Uint8Array(32);
@@ -58,7 +60,7 @@ export function verifyEcdsa(
   const sigR = signature.subarray(0, 32);
   for (let i = 0; i < 32; i += 1) {
     if (xCoord[i] !== sigR[i]) {
-      throw antikleptoError('antiklepto verification failed');
+      throw antikleptoError(VERIFICATION_FAILED_MESSAGE);
     }
   }
 }
