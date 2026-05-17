@@ -3,7 +3,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmod, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
-import { createReadStream } from 'node:fs';
+import { createReadStream, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -12,6 +12,36 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export interface SimulatorEntry {
   url: string;
   sha256: string;
+}
+
+export interface SimulatorCase {
+  name: string;
+  version: string;
+  binaryPath: string;
+}
+
+function simulatorsJsonPath(): string {
+  return path.join(__dirname, 'simulators.json');
+}
+
+function simulatorsDir(): string {
+  return path.join(__dirname, 'simulators');
+}
+
+function parseSimulatorEntries(raw: string): SimulatorEntry[] {
+  const entries = JSON.parse(raw) as SimulatorEntry[];
+  if (!Array.isArray(entries)) {
+    throw new Error('test/simulators.json must contain an array');
+  }
+  return entries;
+}
+
+function binaryNameFromUrl(url: string): string {
+  return path.basename(new URL(url).pathname);
+}
+
+function binaryPathForEntry(entry: SimulatorEntry): string {
+  return path.join(simulatorsDir(), binaryNameFromUrl(entry.url));
 }
 
 async function sha256File(filePath: string): Promise<string> {
@@ -48,15 +78,14 @@ async function downloadOne(url: string, dest: string): Promise<void> {
  * cached with the right hash. Returns absolute paths in list order.
  */
 export async function downloadSimulators(): Promise<string[]> {
-  const jsonPath = path.join(__dirname, 'simulators.json');
-  const entries = JSON.parse(await readFile(jsonPath, 'utf8')) as SimulatorEntry[];
-  const dir = path.join(__dirname, 'simulators');
+  const entries = parseSimulatorEntries(await readFile(simulatorsJsonPath(), 'utf8'));
+  const dir = simulatorsDir();
   await mkdir(dir, { recursive: true });
 
   const paths: string[] = [];
   for (const entry of entries) {
-    const name = path.basename(new URL(entry.url).pathname);
-    const dest = path.join(dir, name);
+    const name = binaryNameFromUrl(entry.url);
+    const dest = binaryPathForEntry(entry);
 
     let cached = false;
     if (await fileExists(dest)) {
@@ -74,6 +103,52 @@ export async function downloadSimulators(): Promise<string[]> {
     paths.push(dest);
   }
   return paths;
+}
+
+let downloadedSimulators: Promise<Set<string>> | undefined;
+
+async function downloadedSimulatorPaths(): Promise<Set<string>> {
+  const paths = await downloadSimulators();
+  return new Set(paths);
+}
+
+/**
+ * Return the simulator matrix without downloading binaries. Each case maps one
+ * manifest entry to its expected on-disk path and parsed firmware version.
+ */
+export function simulatorCases(): SimulatorCase[] {
+  const override = process.env.SIMULATOR;
+  if (override !== undefined && override.length > 0) {
+    const binaryPath = path.resolve(override);
+    const version = parseVersionFromFilename(path.basename(binaryPath));
+    return [{ name: version, version, binaryPath }];
+  }
+
+  const entries = parseSimulatorEntries(readFileSync(simulatorsJsonPath(), 'utf8'));
+  return entries.map((entry) => {
+    const binaryPath = binaryPathForEntry(entry);
+    const version = parseVersionFromFilename(path.basename(binaryPath));
+    return { name: version, version, binaryPath };
+  });
+}
+
+/**
+ * Ensure a simulator case is present and hash-verified before it is launched.
+ * Downloads the full manifest once per test worker so manifest/hash issues fail
+ * before any matrix case can silently use stale binaries.
+ */
+export async function ensureSimulator(simulator: SimulatorCase): Promise<string> {
+  const override = process.env.SIMULATOR;
+  if (override !== undefined && override.length > 0) {
+    return simulator.binaryPath;
+  }
+
+  downloadedSimulators ??= downloadedSimulatorPaths();
+  const paths = await downloadedSimulators;
+  if (!paths.has(simulator.binaryPath)) {
+    throw new Error(`simulator not found in downloaded manifest: ${simulator.binaryPath}`);
+  }
+  return simulator.binaryPath;
 }
 
 /**
@@ -100,9 +175,28 @@ export class SimulatorServer {
     });
   }
 
-  kill(): void {
-    if (!this.child.killed && this.child.exitCode === null) {
-      this.child.kill('SIGTERM');
+  kill(signal: NodeJS.Signals = 'SIGTERM'): void {
+    if (this.child.exitCode === null) {
+      this.child.kill(signal);
+    }
+  }
+
+  async stop(timeoutMs = 5_000): Promise<void> {
+    this.kill();
+
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = await Promise.race([
+      this.exited.then(() => false),
+      new Promise<boolean>((resolve) => {
+        timeout = setTimeout(() => { resolve(true); }, timeoutMs);
+      }),
+    ]);
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+    if (timedOut && this.child.exitCode === null) {
+      this.kill('SIGKILL');
+      await this.exited;
     }
   }
 }
