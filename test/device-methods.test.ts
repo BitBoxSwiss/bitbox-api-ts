@@ -62,6 +62,12 @@ class FakeDeviceChannel implements EncryptedChannel {
   }
 }
 
+class EmptyResponseChannel implements EncryptedChannel {
+  async query(_plaintext: Uint8Array): Promise<Uint8Array> {
+    return toBinary(ResponseSchema, create(ResponseSchema, {}));
+  }
+}
+
 describe('device methods', () => {
   it('deviceInfo returns the wasm package DeviceInfo shape', async () => {
     const channel = new FakeDeviceChannel();
@@ -87,5 +93,15 @@ describe('device methods', () => {
 
     await expect(paired.rootFingerprint()).resolves.toBe('4c00739d');
     expect(channel.requests).toEqual(['fingerprint']);
+  });
+
+  it('maps a missing top-level response oneof to protobuf-decode', async () => {
+    const channel = new EmptyResponseChannel();
+    const paired = new PairedBitBox({ channel, info: INFO, close(): void {} });
+
+    await expect(paired.deviceInfo()).rejects.toMatchObject({
+      code: 'protobuf-decode',
+      message: 'protobuf message could not be decoded',
+    });
   });
 });

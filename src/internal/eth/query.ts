@@ -32,6 +32,9 @@ export async function query(
   } catch {
     throw makeError(CODE_PROTOBUF_DECODE, 'protobuf message could not be decoded');
   }
+  if (decoded.response.case === undefined) {
+    throw makeError(CODE_PROTOBUF_DECODE, 'protobuf message could not be decoded');
+  }
   if (decoded.response.case === 'error') {
     const { code: numericCode } = decoded.response.value;
     const { code, message } = deviceErrorFor(numericCode);
