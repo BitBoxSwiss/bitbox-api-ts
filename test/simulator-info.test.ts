@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { BitBox } from '../src/index.js';
+import { BitBox, PairedBitBox } from '../src/index.js';
 import { connectSimulator, probeSimulatorInfo } from '../src/internal/connect-simulator.js';
 import { atLeast, parseSemver } from '../src/internal/hww.js';
 import { NoiseConfigNoCache } from '../src/internal/noise-config.js';
+import { completePairing, performHandshake } from '../src/internal/pairing.js';
+import { restoreFromMnemonic } from '../src/internal/restore.js';
 import {
   SimulatorServer,
   ensureSimulator,
@@ -38,6 +40,12 @@ describe.skipIf(!ENABLED).sequential.each(simulatorCases())('simulator info prob
       : 'bitbox02-multi';
   }
 
+  function expectedDeviceName(): 'BitBox HCXT' | 'My BitBox' {
+    return atLeast(version, { major: 9, minor: 24, patch: 0 })
+      ? 'BitBox HCXT'
+      : 'My BitBox';
+  }
+
   it('HWW info reports the expected version, product, and state', async () => {
     let onCloseCalls = 0;
     const probe = await probeSimulatorInfo(undefined, () => { onCloseCalls += 1; });
@@ -69,6 +77,8 @@ describe.skipIf(!ENABLED).sequential.each(simulatorCases())('simulator info prob
         expect(paired.version()).toBe(simulator.version);
         expect(paired.product()).toBe(expectedProduct());
         expect(paired.ethSupported()).toBe(true);
+        const deviceInfo = await paired.deviceInfo();
+        expect(deviceInfo.name).toBe(expectedDeviceName());
       } finally {
         paired.close();
       }
@@ -79,4 +89,25 @@ describe.skipIf(!ENABLED).sequential.each(simulatorCases())('simulator info prob
 
     expect(onCloseCalls).toBe(1);
   }, 15_000);
+
+  it('rootFingerprint returns simulator fingerprint after restore', async () => {
+    let onCloseCalls = 0;
+    const session = await connectSimulator(undefined, () => { onCloseCalls += 1; }, new NoiseConfigNoCache());
+    try {
+      const pairing = await performHandshake(session.hww, session.config);
+      const channel = await completePairing(pairing);
+      await restoreFromMnemonic(channel);
+      const paired = new PairedBitBox({ channel, info: session.hww.info, close: session.close });
+      try {
+        await expect(paired.rootFingerprint()).resolves.toBe('4c00739d');
+      } finally {
+        paired.close();
+      }
+    } catch (err) {
+      session.close();
+      throw err;
+    }
+
+    expect(onCloseCalls).toBe(1);
+  }, 30_000);
 });

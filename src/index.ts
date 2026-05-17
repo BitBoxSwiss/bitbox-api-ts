@@ -16,6 +16,10 @@ import {
   toPublicError,
 } from './internal/errors.js';
 import {
+  deviceInfo as deviceInfoImpl,
+  rootFingerprint as rootFingerprintImpl,
+} from './internal/device.js';
+import {
   ethAddress as ethAddressImpl,
   ethSign1559Transaction as ethSign1559TransactionImpl,
   ethSignMessage as ethSignMessageImpl,
@@ -518,10 +522,14 @@ export class PairedBitBox {
     open.close();
   }
 
-  /** Not implemented in this TypeScript iteration. */
+  /** Query device metadata. */
   async deviceInfo(): Promise<DeviceInfo> {
-    this.#requireOpen('deviceInfo');
-    throw notImplementedError('deviceInfo');
+    const open = this.#requireOpen('deviceInfo');
+    try {
+      return await deviceInfoImpl(open.channel);
+    } catch (err) {
+      throw toPublicError(err);
+    }
   }
 
   /** Returns which product we are connected to. */
@@ -534,10 +542,14 @@ export class PairedBitBox {
     return this.#requireOpen('version').info.version;
   }
 
-  /** Not implemented in this TypeScript iteration. */
+  /** Returns the hex-encoded 4-byte root fingerprint. */
   async rootFingerprint(): Promise<string> {
-    this.#requireOpen('rootFingerprint');
-    throw notImplementedError('rootFingerprint');
+    const open = this.#requireOpen('rootFingerprint');
+    try {
+      return await rootFingerprintImpl(open.channel);
+    } catch (err) {
+      throw toPublicError(err);
+    }
   }
 
   /** Not implemented in this TypeScript iteration. */

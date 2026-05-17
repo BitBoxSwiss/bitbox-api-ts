@@ -271,6 +271,7 @@ describe('PairedBitBox lifecycle', () => {
   it('raw new PairedBitBox(): promise-returning methods reject with invalid-state', async () => {
     const p = new PairedBitBox();
     await expect(p.deviceInfo()).rejects.toMatchObject({ code: 'invalid-state' });
+    await expect(p.rootFingerprint()).rejects.toMatchObject({ code: 'invalid-state' });
     await expect(p.btcXpub('btc', [0], 'xpub', false)).rejects.toMatchObject({ code: 'invalid-state' });
     await expect(p.ethXpub("m/44'/60'/0'/0/0")).rejects.toMatchObject({ code: 'invalid-state' });
     await expect(p.ethAddress(1n, "m/44'/60'/0'/0/0", false)).rejects.toMatchObject({ code: 'invalid-state' });
@@ -292,7 +293,7 @@ describe('PairedBitBox lifecycle', () => {
     const paired = await pairing.waitConfirm();
 
     expect(paired.product()).toBe('bitbox02-multi');
-    await expect(paired.deviceInfo()).rejects.toMatchObject({ code: 'not-implemented' });
+    await expect(paired.changePassword()).rejects.toMatchObject({ code: 'not-implemented' });
     await expect(paired.btcXpub('btc', [0], 'xpub', false)).rejects.toMatchObject({ code: 'unsupported' });
 
     paired.close();
@@ -307,6 +308,7 @@ describe('PairedBitBox lifecycle', () => {
     expect(() => paired.product()).toThrowError();
     try { paired.product(); } catch (err) { expect(asBitboxError(err).code).toBe('invalid-state'); }
     await expect(paired.deviceInfo()).rejects.toMatchObject({ code: 'invalid-state' });
+    await expect(paired.rootFingerprint()).rejects.toMatchObject({ code: 'invalid-state' });
     await expect(paired.btcXpub('btc', [0], 'xpub', false)).rejects.toMatchObject({ code: 'invalid-state' });
     await expect(paired.ethXpub("m/44'/60'/0'/0/0")).rejects.toMatchObject({ code: 'invalid-state' });
   });

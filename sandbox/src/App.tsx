@@ -86,7 +86,7 @@ function App() {
           <button onClick={() => bb02.close()}>Close connection</button>
         </div>
         <Accordion opened title="General">
-          <General />
+          <General bb02={bb02} />
         </Accordion>
         {bb02.ethSupported() && (
           <Accordion title="Ethereum">
