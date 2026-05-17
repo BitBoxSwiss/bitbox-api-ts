@@ -10,7 +10,11 @@ const POINT_TWEAK_TAG = utf8ToBytes('s2c/ecdsa/point');
 
 export function genHostNonce(): Uint8Array {
   const out = new Uint8Array(32);
-  globalThis.crypto.getRandomValues(out);
+  try {
+    globalThis.crypto.getRandomValues(out);
+  } catch {
+    throw antikleptoError('Failed generating antiklepto host nonce');
+  }
   return out;
 }
 
