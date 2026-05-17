@@ -30,51 +30,51 @@ const RECIPIENT = new Uint8Array([
   0x19, 0x2a, 0x35, 0x28, 0x14, 0xfb, 0xe9, 0x27, 0xb8, 0x85,
 ]);
 
-const EIP712_MSG = `{
-  "types": {
-    "EIP712Domain": [
-      { "name": "name", "type": "string" },
-      { "name": "version", "type": "string" },
-      { "name": "chainId", "type": "uint256" },
-      { "name": "verifyingContract", "type": "address" }
+const EIP712_MSG = {
+  types: {
+    EIP712Domain: [
+      { name: 'name', type: 'string' },
+      { name: 'version', type: 'string' },
+      { name: 'chainId', type: 'uint256' },
+      { name: 'verifyingContract', type: 'address' },
     ],
-    "Attachment": [
-      { "name": "contents", "type": "string" }
+    Attachment: [
+      { name: 'contents', type: 'string' },
     ],
-    "Person": [
-      { "name": "name", "type": "string" },
-      { "name": "wallet", "type": "address" },
-      { "name": "age", "type": "uint8" }
+    Person: [
+      { name: 'name', type: 'string' },
+      { name: 'wallet', type: 'address' },
+      { name: 'age', type: 'uint8' },
     ],
-    "Mail": [
-      { "name": "from", "type": "Person" },
-      { "name": "to", "type": "Person" },
-      { "name": "contents", "type": "string" },
-      { "name": "attachments", "type": "Attachment[]" }
-    ]
+    Mail: [
+      { name: 'from', type: 'Person' },
+      { name: 'to', type: 'Person' },
+      { name: 'contents', type: 'string' },
+      { name: 'attachments', type: 'Attachment[]' },
+    ],
   },
-  "primaryType": "Mail",
-  "domain": {
-    "name": "Ether Mail",
-    "version": "1",
-    "chainId": 1,
-    "verifyingContract": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC"
+  primaryType: 'Mail',
+  domain: {
+    name: 'Ether Mail',
+    version: '1',
+    chainId: 1,
+    verifyingContract: '0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC',
   },
-  "message": {
-    "from": {
-      "name": "Cow",
-      "wallet": "0xCD2a3d9F938E13CD947Ec05AbC7FE734Df8DD826",
-      "age": 20
+  message: {
+    from: {
+      name: 'Cow',
+      wallet: '0xCD2a3d9F938E13CD947Ec05AbC7FE734Df8DD826',
+      age: 20,
     },
-    "to": {
-      "name": "Bob",
-      "wallet": "0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB",
-      "age": "0x1e"
+    to: {
+      name: 'Bob',
+      wallet: '0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB',
+      age: '0x1e',
     },
-    "contents": "Hello, Bob!",
-    "attachments": [{ "contents": "attachment1" }, { "contents": "attachment2" }]
-  }
-}`;
+    contents: 'Hello, Bob!',
+    attachments: [{ contents: 'attachment1' }, { contents: 'attachment2' }],
+  },
+};
 
 function toCompactSignature({ r, s }: { r: Uint8Array; s: Uint8Array }): Uint8Array {
   if (r.length !== 32 || s.length !== 32) {
@@ -287,23 +287,23 @@ describe.skipIf(!ENABLED)('simulator eth', () => {
       return;
     }
     const largeBytesHex = 'aa'.repeat(10000);
-    const msg = `{
-      "types": {
-        "EIP712Domain": [
-          { "name": "name", "type": "string" }
+    const msg = {
+      types: {
+        EIP712Domain: [
+          { name: 'name', type: 'string' },
         ],
-        "Msg": [
-          { "name": "data", "type": "bytes" }
-        ]
+        Msg: [
+          { name: 'data', type: 'bytes' },
+        ],
       },
-      "primaryType": "Msg",
-      "domain": {
-        "name": "Test"
+      primaryType: 'Msg',
+      domain: {
+        name: 'Test',
       },
-      "message": {
-        "data": "0x${largeBytesHex}"
-      }
-    }`;
+      message: {
+        data: `0x${largeBytesHex}`,
+      },
+    };
     const sig = await paired!.ethSignTypedMessage(1n, ETH_KEYPATH, msg, false);
     expectSignatureFromSimulatorAddress(eip712BytesSighash(largeBytesHex), sig);
   }, 60_000);

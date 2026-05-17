@@ -709,6 +709,14 @@ describe('ethSignTypedMessage', () => {
     expect(channel.seen).toHaveLength(0);
   });
 
+  it('rejects JSON strings before querying', async () => {
+    const channel = new ScriptedChannel([]);
+    await expect(
+      ethSignTypedMessage(channel, info('9.26.0'), 1n, [0], JSON.stringify(TYPED_MSG), true),
+    ).rejects.toMatchObject({ code: 'eth-typed-message' });
+    expect(channel.seen).toHaveLength(0);
+  });
+
   it('rejects a string value larger than 6144 bytes', async () => {
     const longContents = 'x'.repeat(7000);
     const longMsg = { ...TYPED_MSG, message: { contents: longContents } };
