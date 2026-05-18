@@ -86,6 +86,12 @@ interface TypedError extends Error {
 /** @internal */
 export function makeError(code: string, message: string): TypedError {
   const err = new Error(message) as TypedError;
+  Object.defineProperty(err, 'message', {
+    value: message,
+    enumerable: true,
+    configurable: true,
+    writable: true,
+  });
   err.code = code;
   return err;
 }

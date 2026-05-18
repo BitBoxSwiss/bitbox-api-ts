@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { ensureError, isUserAbort, type Error as BitBoxError } from '../src/index.js';
+import { couldNotOpenBridge } from '../src/internal/errors.js';
 
 describe('ensureError', () => {
   it('passes through structured typed errors unchanged', () => {
@@ -48,6 +49,18 @@ describe('ensureError', () => {
     const second = ensureError(first);
     expect(second).toBe(first);
     expect(second.code).toBe('unknown-js');
+  });
+
+  it('keeps typed Error messages enumerable for extension message passing', () => {
+    const err = couldNotOpenBridge('BitBoxBridge not found.');
+    const cloned = JSON.parse(JSON.stringify(err));
+
+    expect(err).toBeInstanceOf(Error);
+    expect(Object.keys(err)).toEqual(expect.arrayContaining(['code', 'message']));
+    expect(cloned).toEqual({
+      code: 'could-not-open',
+      message: 'Could not open device. BitBoxBridge not found.',
+    });
   });
 });
 
