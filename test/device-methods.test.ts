@@ -21,50 +21,97 @@ const INFO: Info = {
   initialized: true,
 };
 
+function responseFor(request: Request): Uint8Array {
+  let response: Response;
+  switch (request.request.case) {
+    case 'deviceInfo':
+      response = create(ResponseSchema, {
+        response: {
+          case: 'deviceInfo',
+          value: create(DeviceInfoResponseSchema, {
+            name: 'My BitBox',
+            initialized: true,
+            version: '9.26.1',
+            mnemonicPassphraseEnabled: false,
+            securechipModel: 'ATECC608B',
+            monotonicIncrementsRemaining: 42,
+            passwordStretchingAlgo: 'pwhash',
+          }),
+        },
+      });
+      break;
+    case 'fingerprint':
+      response = create(ResponseSchema, {
+        response: {
+          case: 'fingerprint',
+          value: create(RootFingerprintResponseSchema, {
+            fingerprint: new Uint8Array([0x4c, 0x00, 0x73, 0x9d]),
+          }),
+        },
+      });
+      break;
+    default:
+      throw new Error(`unexpected request: ${request.request.case}`);
+  }
+  return toBinary(ResponseSchema, response);
+}
+
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
 class FakeDeviceChannel implements EncryptedChannel {
   readonly requests: Request['request']['case'][] = [];
 
   async query(plaintext: Uint8Array): Promise<Uint8Array> {
     const request = fromBinary(RequestSchema, plaintext);
     this.requests.push(request.request.case);
-    let response: Response;
-    switch (request.request.case) {
-      case 'deviceInfo':
-        response = create(ResponseSchema, {
-          response: {
-            case: 'deviceInfo',
-            value: create(DeviceInfoResponseSchema, {
-              name: 'My BitBox',
-              initialized: true,
-              version: '9.26.1',
-              mnemonicPassphraseEnabled: false,
-              securechipModel: 'ATECC608B',
-              monotonicIncrementsRemaining: 42,
-              passwordStretchingAlgo: 'pwhash',
-            }),
-          },
-        });
-        break;
-      case 'fingerprint':
-        response = create(ResponseSchema, {
-          response: {
-            case: 'fingerprint',
-            value: create(RootFingerprintResponseSchema, {
-              fingerprint: new Uint8Array([0x4c, 0x00, 0x73, 0x9d]),
-            }),
-          },
-        });
-        break;
-      default:
-        throw new Error(`unexpected request: ${request.request.case}`);
-    }
-    return toBinary(ResponseSchema, response);
+    return responseFor(request);
   }
 }
 
 class EmptyResponseChannel implements EncryptedChannel {
   async query(_plaintext: Uint8Array): Promise<Uint8Array> {
     return toBinary(ResponseSchema, create(ResponseSchema, {}));
+  }
+}
+
+class BlockingFirstQueryChannel implements EncryptedChannel {
+  readonly requests: Request['request']['case'][] = [];
+  activeQueries = 0;
+  maxActiveQueries = 0;
+  readonly firstQueryStarted = deferred();
+  readonly releaseFirstQuery = deferred();
+
+  async query(plaintext: Uint8Array): Promise<Uint8Array> {
+    const request = fromBinary(RequestSchema, plaintext);
+    this.requests.push(request.request.case);
+    this.activeQueries += 1;
+    this.maxActiveQueries = Math.max(this.maxActiveQueries, this.activeQueries);
+    try {
+      if (this.requests.length === 1) {
+        this.firstQueryStarted.resolve();
+        await this.releaseFirstQuery.promise;
+      }
+      return responseFor(request);
+    } finally {
+      this.activeQueries -= 1;
+    }
+  }
+}
+
+class FailsFirstChannel extends FakeDeviceChannel {
+  override async query(plaintext: Uint8Array): Promise<Uint8Array> {
+    const request = fromBinary(RequestSchema, plaintext);
+    this.requests.push(request.request.case);
+    if (this.requests.length === 1) {
+      return toBinary(ResponseSchema, create(ResponseSchema, {}));
+    }
+    return responseFor(request);
   }
 }
 
@@ -103,5 +150,44 @@ describe('device methods', () => {
       code: 'protobuf-decode',
       message: 'protobuf message could not be decoded',
     });
+  });
+
+  it('serializes concurrent device queries', async () => {
+    const channel = new BlockingFirstQueryChannel();
+    const paired = new PairedBitBox({ channel, info: INFO, close(): void {} });
+
+    const deviceInfo = paired.deviceInfo();
+    await channel.firstQueryStarted.promise;
+
+    const rootFingerprint = paired.rootFingerprint();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(channel.requests).toEqual(['deviceInfo']);
+    expect(channel.maxActiveQueries).toBe(1);
+
+    channel.releaseFirstQuery.resolve();
+    await expect(Promise.all([deviceInfo, rootFingerprint])).resolves.toEqual([
+      {
+        name: 'My BitBox',
+        initialized: true,
+        version: '9.26.1',
+        mnemonicPassphraseEnabled: false,
+        securechipModel: 'ATECC608B',
+        monotonicIncrementsRemaining: 42,
+      },
+      '4c00739d',
+    ]);
+    expect(channel.requests).toEqual(['deviceInfo', 'fingerprint']);
+    expect(channel.maxActiveQueries).toBe(1);
+  });
+
+  it('continues serializing after a rejected query', async () => {
+    const channel = new FailsFirstChannel();
+    const paired = new PairedBitBox({ channel, info: INFO, close(): void {} });
+
+    await expect(paired.deviceInfo()).rejects.toMatchObject({ code: 'protobuf-decode' });
+    await expect(paired.rootFingerprint()).resolves.toBe('4c00739d');
+    expect(channel.requests).toEqual(['deviceInfo', 'fingerprint']);
   });
 });

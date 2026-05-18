@@ -480,6 +480,7 @@ function makePairingBitBox(state: PairingState, close: () => void): PairingBitBo
  */
 export class PairedBitBox {
   #state: PairedStateUnion = { kind: 'uninitialized' };
+  #queue: Promise<void> = Promise.resolve();
 
   /** @internal */
   constructor(init?: Omit<PairedOpen, 'kind'>) {
@@ -504,6 +505,43 @@ export class PairedBitBox {
     return state;
   }
 
+  /**
+   * Serializes all device-touching public methods on this paired connection.
+   *
+   * The BitBox protocol and Noise channel are ordered streams, not multiplexed
+   * request/response transports. Some public methods also perform multi-step
+   * conversations (for example ETH streaming or anti-klepto signing), so the
+   * lock must cover the whole public method, not only one encrypted query.
+   *
+   * Calls made after close fail before joining the queue, so they do not wait
+   * behind a stuck transport read. The open state is checked again when the
+   * queued operation starts, so calls queued before close still fail if they
+   * did not already enter the device conversation.
+   *
+   * Each call chains onto the previous queue tail and then replaces the tail
+   * with a settled `void` promise, so a rejected call does not poison later
+   * queued operations.
+   */
+  #runExclusive<T>(
+    method: string,
+    fn: (open: PairedOpen) => Promise<T>,
+  ): Promise<T> {
+    this.#requireOpen(method);
+    const run = this.#queue.catch(() => undefined).then(async () => {
+      const open = this.#requireOpen(method);
+      try {
+        return await fn(open);
+      } catch (err) {
+        throw toPublicError(err);
+      }
+    });
+    this.#queue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
   /** No-op; retained for ABI compatibility with the wasm-bindgen output. */
   free(): void {}
 
@@ -524,12 +562,7 @@ export class PairedBitBox {
 
   /** Query device metadata. */
   async deviceInfo(): Promise<DeviceInfo> {
-    const open = this.#requireOpen('deviceInfo');
-    try {
-      return await deviceInfoImpl(open.channel);
-    } catch (err) {
-      throw toPublicError(err);
-    }
+    return this.#runExclusive('deviceInfo', open => deviceInfoImpl(open.channel));
   }
 
   /** Returns which product we are connected to. */
@@ -544,12 +577,7 @@ export class PairedBitBox {
 
   /** Returns the hex-encoded 4-byte root fingerprint. */
   async rootFingerprint(): Promise<string> {
-    const open = this.#requireOpen('rootFingerprint');
-    try {
-      return await rootFingerprintImpl(open.channel);
-    } catch (err) {
-      throw toPublicError(err);
-    }
+    return this.#runExclusive('rootFingerprint', open => rootFingerprintImpl(open.channel));
   }
 
   /** Not implemented in this TypeScript iteration. */
@@ -647,12 +675,7 @@ export class PairedBitBox {
 
   /** Query the device for an Ethereum account xpub. */
   async ethXpub(keypath: Keypath): Promise<string> {
-    const open = this.#requireOpen('ethXpub');
-    try {
-      return await ethXpubImpl(open.channel, keypath);
-    } catch (err) {
-      throw toPublicError(err);
-    }
+    return this.#runExclusive('ethXpub', open => ethXpubImpl(open.channel, keypath));
   }
 
   /**
@@ -661,12 +684,9 @@ export class PairedBitBox {
    * Set `display` to `true` to require on-device confirmation.
    */
   async ethAddress(chain_id: bigint, keypath: Keypath, display: boolean): Promise<string> {
-    const open = this.#requireOpen('ethAddress');
-    try {
-      return await ethAddressImpl(open.channel, chain_id, keypath, display);
-    } catch (err) {
-      throw toPublicError(err);
-    }
+    return this.#runExclusive('ethAddress', open =>
+      ethAddressImpl(open.channel, chain_id, keypath, display),
+    );
   }
 
   /**
@@ -681,19 +701,16 @@ export class PairedBitBox {
     tx: EthTransaction,
     address_case?: EthAddressCase,
   ): Promise<EthSignature> {
-    const open = this.#requireOpen('ethSignTransaction');
-    try {
-      return await ethSignTransactionImpl(
+    return this.#runExclusive('ethSignTransaction', open =>
+      ethSignTransactionImpl(
         open.channel,
         open.info,
         chain_id,
         keypath,
         tx,
         address_case,
-      );
-    } catch (err) {
-      throw toPublicError(err);
-    }
+      ),
+    );
   }
 
   /**
@@ -706,18 +723,15 @@ export class PairedBitBox {
     tx: Eth1559Transaction,
     address_case?: EthAddressCase,
   ): Promise<EthSignature> {
-    const open = this.#requireOpen('ethSign1559Transaction');
-    try {
-      return await ethSign1559TransactionImpl(
+    return this.#runExclusive('ethSign1559Transaction', open =>
+      ethSign1559TransactionImpl(
         open.channel,
         open.info,
         keypath,
         tx,
         address_case,
-      );
-    } catch (err) {
-      throw toPublicError(err);
-    }
+      ),
+    );
   }
 
   /**
@@ -731,12 +745,9 @@ export class PairedBitBox {
     keypath: Keypath,
     msg: Uint8Array,
   ): Promise<EthSignature> {
-    const open = this.#requireOpen('ethSignMessage');
-    try {
-      return await ethSignMessageImpl(open.channel, open.info, chain_id, keypath, msg);
-    } catch (err) {
-      throw toPublicError(err);
-    }
+    return this.#runExclusive('ethSignMessage', open =>
+      ethSignMessageImpl(open.channel, open.info, chain_id, keypath, msg),
+    );
   }
 
   /**
@@ -750,19 +761,16 @@ export class PairedBitBox {
     msg: any,
     use_antiklepto?: boolean,
   ): Promise<EthSignature> {
-    const open = this.#requireOpen('ethSignTypedMessage');
-    try {
-      return await ethSignTypedMessageImpl(
+    return this.#runExclusive('ethSignTypedMessage', open =>
+      ethSignTypedMessageImpl(
         open.channel,
         open.info,
         chain_id,
         keypath,
         msg,
         use_antiklepto,
-      );
-    } catch (err) {
-      throw toPublicError(err);
-    }
+      ),
+    );
   }
 
   /** Cardano support is not implemented in this TypeScript iteration. */
