@@ -39,6 +39,10 @@ function ResultBlock({ value }: { value: string }) {
   );
 }
 
+function formatResult(value: unknown | undefined): string {
+  return value === undefined ? '' : JSON.stringify(value, null, 2);
+}
+
 function EthXPub({ bb02 }: Props) {
   const keypaths = ["m/44'/60'/0'/0", "m/44'/1'/0'/0"];
   const [keypath, setKeypath] = useState(keypaths[0]);
@@ -199,7 +203,7 @@ function EthSignTransaction({ bb02 }: Props) {
         <label>Transaction</label>
         <textarea value={txJson} onChange={e => setTxJson(e.target.value)} rows={9} />
         <button type="submit" disabled={running}>Sign transaction</button>
-        <ResultBlock value={result ? JSON.stringify(result, null, 2) : ''} />
+        <ResultBlock value={formatResult(result)} />
         {err !== undefined && (
           <ErrorNotification message={err.message} code={err.code} onClose={() => setErr(undefined)} />
         )}
@@ -270,7 +274,7 @@ function EthSign1559Transaction({ bb02 }: Props) {
         <label>Transaction</label>
         <textarea value={txJson} onChange={e => setTxJson(e.target.value)} rows={9} />
         <button type="submit" disabled={running}>Sign EIP-1559 transaction</button>
-        <ResultBlock value={result ? JSON.stringify(result, null, 2) : ''} />
+        <ResultBlock value={formatResult(result)} />
         {err !== undefined && (
           <ErrorNotification message={err.message} code={err.code} onClose={() => setErr(undefined)} />
         )}
@@ -320,7 +324,7 @@ function EthSignMessage({ bb02 }: Props) {
         <label>Message</label>
         <textarea value={msg} onChange={e => setMsg(e.target.value)} rows={4} />
         <button type="submit" disabled={running}>Sign message</button>
-        <ResultBlock value={result ? JSON.stringify(result, null, 2) : ''} />
+        <ResultBlock value={formatResult(result)} />
         {err !== undefined && (
           <ErrorNotification message={err.message} code={err.code} onClose={() => setErr(undefined)} />
         )}
@@ -417,7 +421,7 @@ function EthSignTypedMessage({ bb02 }: Props) {
         <label>EIP-712 typed message</label>
         <textarea value={msg} onChange={e => setMsg(e.target.value)} rows={20} />
         <button type="submit" disabled={running}>Sign typed message</button>
-        <ResultBlock value={result ? JSON.stringify(result, null, 2) : ''} />
+        <ResultBlock value={formatResult(result)} />
         {err !== undefined && (
           <ErrorNotification message={err.message} code={err.code} onClose={() => setErr(undefined)} />
         )}
@@ -500,7 +504,7 @@ function EthSign1559TransactionStreaming({ bb02 }: Props) {
           />
         </label>
         <button type="submit" disabled={running}>Sign streaming transaction</button>
-        <ResultBlock value={result ? JSON.stringify(result, null, 2) : ''} />
+        <ResultBlock value={formatResult(result)} />
         {err !== undefined && (
           <ErrorNotification message={err.message} code={err.code} onClose={() => setErr(undefined)} />
         )}
@@ -576,7 +580,7 @@ function EthSignTypedMessageStreaming({ bb02 }: Props) {
           />
         </label>
         <button type="submit" disabled={running}>Sign streaming typed message</button>
-        <ResultBlock value={result ? JSON.stringify(result, null, 2) : ''} />
+        <ResultBlock value={formatResult(result)} />
         {err !== undefined && (
           <ErrorNotification message={err.message} code={err.code} onClose={() => setErr(undefined)} />
         )}
