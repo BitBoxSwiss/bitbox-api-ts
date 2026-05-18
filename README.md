@@ -131,8 +131,10 @@ const address = await bb02.ethAddress(chainId, keypath, true);
 ```
 
 Transaction byte fields are big-endian `Uint8Array`s without a `0x` prefix.
-Pass `ethIdentifyCase()` for the optional recipient case hint when you derive
-the transaction from a hex address string.
+Returned signature byte fields are plain `number[]` arrays, matching the
+runtime shape of the old WASM package. Pass `ethIdentifyCase()` for the
+optional recipient case hint when you derive the transaction from a hex address
+string.
 
 ```ts
 function hexToBytes(hex: string): Uint8Array {

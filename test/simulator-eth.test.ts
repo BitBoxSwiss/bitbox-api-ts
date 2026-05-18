@@ -5,7 +5,12 @@ import { secp256k1 } from '@noble/curves/secp256k1';
 import { keccak_256 } from '@noble/hashes/sha3';
 import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from '@noble/hashes/utils';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { PairedBitBox, type Eth1559Transaction, type EthTransaction } from '../src/index.js';
+import {
+  PairedBitBox,
+  type Eth1559Transaction,
+  type EthSignature,
+  type EthTransaction,
+} from '../src/index.js';
 import { connectSimulator } from '../src/internal/connect-simulator.js';
 import { atLeast, parseSemver } from '../src/internal/hww.js';
 import { NoiseConfigNoCache } from '../src/internal/noise-config.js';
@@ -75,20 +80,18 @@ const EIP712_MSG = {
   },
 };
 
-function toCompactSignature({ r, s }: { r: Uint8Array; s: Uint8Array }): Uint8Array {
+function toCompactSignature({ r, s }: Pick<EthSignature, 'r' | 's'>): Uint8Array {
   if (r.length !== 32 || s.length !== 32) {
     throw new Error('expected 32-byte r and s');
   }
-  return concatBytes(r, s);
+  return concatBytes(Uint8Array.from(r), Uint8Array.from(s));
 }
 
-type SignatureParts = { r: Uint8Array; s: Uint8Array; v: Uint8Array };
-
-function signatureBytes(signature: SignatureParts): Uint8Array {
+function signatureBytes(signature: EthSignature): Uint8Array {
   if (signature.v.length !== 1) {
     throw new Error('expected 1-byte v');
   }
-  return concatBytes(toCompactSignature(signature), signature.v);
+  return concatBytes(toCompactSignature(signature), Uint8Array.from(signature.v));
 }
 
 function legacySighash(chainId: bigint, tx: EthTransaction): Uint8Array {
@@ -149,9 +152,9 @@ function recoverAddress(hash: Uint8Array, compactSig: Uint8Array, recoveryId: nu
 
 function expectSignatureFromSimulatorAddress(
   hash: Uint8Array,
-  signature: SignatureParts,
+  signature: EthSignature,
 ): void {
-  const compact = signatureBytes(signature).subarray(0, 64);
+  const compact = toCompactSignature(signature);
   const candidates = [recoverAddress(hash, compact, 0), recoverAddress(hash, compact, 1)];
   expect(candidates).toContain(SIMULATOR_ETH_ADDRESS);
 }

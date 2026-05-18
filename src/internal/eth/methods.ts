@@ -119,18 +119,18 @@ function unwrapDirectSignature(response: ETHResponse['response']): Uint8Array {
   return response.value.signature;
 }
 
-function shapeLegacyV(recid: number, chainId: bigint): Uint8Array {
+function shapeLegacyV(recid: number, chainId: bigint): number[] {
   const v = BigInt(recid) + 27n + chainId * 2n + 8n;
   if (v > UINT64_MAX) {
     throw chainIdTooLargeError(chainId);
   }
-  return bigUintToBytesBE(v);
+  return Array.from(bigUintToBytesBE(v));
 }
 
-function buildSignature(signature: Uint8Array, v: Uint8Array): EthSignature {
+function buildSignature(signature: Uint8Array, v: number[]): EthSignature {
   return {
-    r: signature.slice(0, 32),
-    s: signature.slice(32, 64),
+    r: Array.from(signature.subarray(0, 32)),
+    s: Array.from(signature.subarray(32, 64)),
     v,
   };
 }
@@ -259,7 +259,7 @@ export async function ethSign1559Transaction(
     response = await handleEthDataStreaming(channel, tx.data, response);
   }
   const signature = await antikleptoFinish(channel, response, hostNonce);
-  return buildSignature(signature, new Uint8Array([signature[64]!]));
+  return buildSignature(signature, [signature[64]!]);
 }
 
 export async function ethSignMessage(
@@ -283,7 +283,7 @@ export async function ethSignMessage(
 
   const response = await queryEth(channel, { case: 'signMsg', value: req });
   const signature = await antikleptoFinish(channel, response, hostNonce);
-  return buildSignature(signature, new Uint8Array([(signature[64]! + 27) & 0xff]));
+  return buildSignature(signature, [(signature[64]! + 27) & 0xff]);
 }
 
 export async function ethSignTypedMessage(
@@ -343,5 +343,5 @@ export async function ethSignTypedMessage(
       ? await antikleptoFinish(channel, response, hostNonce)
       : unwrapDirectSignature(response);
 
-  return buildSignature(signature, new Uint8Array([(signature[64]! + 27) & 0xff]));
+  return buildSignature(signature, [(signature[64]! + 27) & 0xff]);
 }

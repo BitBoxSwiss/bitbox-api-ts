@@ -123,9 +123,9 @@ export type BtcScriptConfigWithKeypath = {
 };
 
 export type BtcSignMessageSignature = {
-  sig: Uint8Array;
-  recid: bigint;
-  electrumSig65: Uint8Array;
+  sig: number[];
+  recid: number;
+  electrumSig65: number[];
 };
 
 export type BtcXpubs = string[];
@@ -154,14 +154,14 @@ export type Eth1559Transaction = {
 
 /** Ethereum signature split into R, S, and V byte arrays. */
 export type EthSignature = {
-  r: Uint8Array;
-  s: Uint8Array;
-  v: Uint8Array;
+  r: number[];
+  s: number[];
+  v: number[];
 };
 
 export type EthAddressCase = 'upper' | 'lower' | 'mixed';
 
-export type CardanoXpub = Uint8Array;
+export type CardanoXpub = number[];
 export type CardanoXpubs = CardanoXpub[];
 export type CardanoNetwork = 'mainnet' | 'testnet';
 
@@ -226,8 +226,8 @@ export type CardanoTransaction = {
 };
 
 export type CardanoShelleyWitness = {
-  signature: Uint8Array;
-  publicKey: Uint8Array;
+  signature: number[];
+  publicKey: number[];
 };
 
 export type CardanoSignTransactionResult = {
