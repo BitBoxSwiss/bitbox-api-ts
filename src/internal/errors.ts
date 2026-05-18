@@ -86,6 +86,9 @@ interface TypedError extends Error {
 /** @internal */
 export function makeError(code: string, message: string): TypedError {
   const err = new Error(message) as TypedError;
+  // Error.message is non-enumerable by default, so JSON serialization and
+  // Chrome extension message boundaries would otherwise drop it. Keep typed
+  // errors Error-like while preserving the public { code, message } shape.
   Object.defineProperty(err, 'message', {
     value: message,
     enumerable: true,
