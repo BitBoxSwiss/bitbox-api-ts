@@ -247,7 +247,13 @@ describe('buildStructTypes', () => {
 
 describe('parseEip712Message', () => {
   it('parses and validates the full message shape', () => {
-    expect(parseEip712Message(JSON.stringify(EIP712_MSG))).toEqual(EIP712_MSG);
+    expect(parseEip712Message(EIP712_MSG)).toEqual(EIP712_MSG);
+  });
+
+  it('rejects JSON strings; callers must pass the raw typed-data object', () => {
+    expect(() => parseEip712Message(JSON.stringify(EIP712_MSG))).toThrow(
+      expect.objectContaining({ code: 'eth-typed-message' }),
+    );
   });
 
   it('rejects malformed type members', () => {

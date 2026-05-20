@@ -124,6 +124,6 @@ hardware through WebHID or BitBoxBridge:
 make sandbox-dev
 ```
 
-The sandbox aliases `bitbox-api-ts` to `../src/index.ts`, so source edits
+The sandbox aliases `@bitboxswiss/bitbox-api` to `../src/index.ts`, so source edits
 hot-reload without building `dist/`. Browsers cannot connect to the raw TCP
 simulator transport directly; simulator coverage belongs in `npm run test:sim`.

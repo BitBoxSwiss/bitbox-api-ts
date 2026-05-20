@@ -3,9 +3,15 @@
 import { describe, expect, it } from 'vitest';
 import type { Info } from '../src/internal/hww.js';
 import { InMemoryNoiseConfig, containsDeviceStaticPubkey } from '../src/internal/noise-config.js';
-import { NoiseXX, publicKeyFromPrivateKey, type HandshakeFinalState } from '../src/internal/noise.js';
+import {
+  CipherState,
+  NoiseXX,
+  publicKeyFromPrivateKey,
+  type HandshakeFinalState,
+} from '../src/internal/noise.js';
 import {
   completePairing,
+  makeEncryptedChannel,
   performHandshake,
   type PairingTransport,
 } from '../src/internal/pairing.js';
@@ -167,5 +173,63 @@ describe('pairing flow', () => {
       message: 'pairing code rejected by user',
     });
     expect(containsDeviceStaticPubkey(config.read(), publicKeyFromPrivateKey(deviceSk))).toBe(false);
+  });
+
+  it('maps malformed handshake messages to noise errors', async () => {
+    const config = new InMemoryNoiseConfig();
+    const device: PairingTransport = {
+      info: INFO,
+      async query(msg: Uint8Array): Promise<Uint8Array> {
+        const opcode = msg[0];
+        if (opcode === OP_UNLOCK || opcode === OP_I_CAN_HAS_HANDSHAEK) {
+          return success();
+        }
+        if (opcode === OP_HER_COMEZ_TEH_HANDSHAEK) {
+          return success(new Uint8Array(10));
+        }
+        throw new Error(`unexpected opcode: ${opcode}`);
+      },
+    };
+
+    await expect(performHandshake(device, config)).rejects.toMatchObject({
+      code: 'noise',
+    });
+  });
+
+  it('maps encrypted response authentication failures to noise errors', async () => {
+    const device: PairingTransport = {
+      info: INFO,
+      async query(_msg: Uint8Array): Promise<Uint8Array> {
+        return success(new Uint8Array(16));
+      },
+    };
+    const channel = makeEncryptedChannel(
+      device,
+      new CipherState(pinned32(70)),
+      new CipherState(pinned32(71)),
+    );
+
+    await expect(channel.query(bytes(0x01))).rejects.toMatchObject({
+      code: 'noise',
+    });
+  });
+
+  it('maps encrypted non-success status to unexpected-response', async () => {
+    const device: PairingTransport = {
+      info: INFO,
+      async query(_msg: Uint8Array): Promise<Uint8Array> {
+        return hwwFailure();
+      },
+    };
+    const channel = makeEncryptedChannel(
+      device,
+      new CipherState(pinned32(72)),
+      new CipherState(pinned32(73)),
+    );
+
+    await expect(channel.query(bytes(0x01))).rejects.toMatchObject({
+      code: 'unexpected-response',
+      message: 'BitBox returned an unexpected response',
+    });
   });
 });

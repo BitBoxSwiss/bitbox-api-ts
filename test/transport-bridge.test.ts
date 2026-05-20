@@ -148,6 +148,27 @@ describe('openBridge', () => {
     FakeBridgeSocket.onConstruct = null;
   });
 
+  it('close() waits for the websocket close event before invoking onCloseCb', async () => {
+    const fetchMock = scriptedFetch([okJson({ devices: [{ path: 'p' }] })]);
+    let constructed: FakeBridgeSocket | null = null;
+    FakeBridgeSocket.onConstruct = (s) => {
+      constructed = s;
+      s.triggerOpen();
+    };
+    let calls = 0;
+    const transport = await openBridge(() => { calls += 1; }, { fetch: fetchMock.fn, WebSocket: FakeBridgeSocket });
+    constructed!.close = () => {
+      constructed!.closed = true;
+      constructed!.readyState = 2;
+    };
+
+    transport.close();
+    expect(calls).toBe(0);
+    constructed!.triggerClose();
+    expect(calls).toBe(1);
+    FakeBridgeSocket.onConstruct = null;
+  });
+
   it('rejects with a typed bridge error on onerror', async () => {
     const fetchMock = scriptedFetch([okJson({ devices: [{ path: 'p' }] })]);
     FakeBridgeSocket.onConstruct = (s) => { s.triggerError(); };

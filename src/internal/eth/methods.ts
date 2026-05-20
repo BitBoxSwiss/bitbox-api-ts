@@ -74,6 +74,8 @@ function mapAddressCase(value: EthAddressCase | undefined): PbAddressCase {
     case 'mixed':
     case undefined:
       return PbAddressCase.ETH_ADDRESS_CASE_MIXED;
+    default:
+      throw invalidTypeError('wrong type for EthAddressCase');
   }
 }
 
@@ -117,39 +119,20 @@ function unwrapDirectSignature(response: ETHResponse['response']): Uint8Array {
   return response.value.signature;
 }
 
-function shapeLegacyV(recid: number, chainId: bigint): Uint8Array {
+function shapeLegacyV(recid: number, chainId: bigint): number[] {
   const v = BigInt(recid) + 27n + chainId * 2n + 8n;
   if (v > UINT64_MAX) {
     throw chainIdTooLargeError(chainId);
   }
-  return bigUintToBytesBE(v);
+  return Array.from(bigUintToBytesBE(v));
 }
 
-function withJsonArray(bytes: Uint8Array): Uint8Array {
-  Object.defineProperty(bytes, 'toJSON', {
-    value: () => Array.from(bytes),
-    enumerable: false,
-    configurable: true,
-  });
-  return bytes;
-}
-
-function buildSignature(signature: Uint8Array, v: Uint8Array): EthSignature {
-  const out = {
-    r: withJsonArray(signature.slice(0, 32)),
-    s: withJsonArray(signature.slice(32, 64)),
-    v: withJsonArray(v),
+function buildSignature(signature: Uint8Array, v: number[]): EthSignature {
+  return {
+    r: Array.from(signature.subarray(0, 32)),
+    s: Array.from(signature.subarray(32, 64)),
+    v,
   };
-  Object.defineProperty(out, 'toJSON', {
-    value: () => ({
-      r: Array.from(out.r),
-      s: Array.from(out.s),
-      v: Array.from(out.v),
-    }),
-    enumerable: false,
-    configurable: true,
-  });
-  return out;
 }
 
 export async function ethXpub(
@@ -276,7 +259,7 @@ export async function ethSign1559Transaction(
     response = await handleEthDataStreaming(channel, tx.data, response);
   }
   const signature = await antikleptoFinish(channel, response, hostNonce);
-  return buildSignature(signature, new Uint8Array([signature[64]!]));
+  return buildSignature(signature, [signature[64]!]);
 }
 
 export async function ethSignMessage(
@@ -300,7 +283,7 @@ export async function ethSignMessage(
 
   const response = await queryEth(channel, { case: 'signMsg', value: req });
   const signature = await antikleptoFinish(channel, response, hostNonce);
-  return buildSignature(signature, new Uint8Array([(signature[64]! + 27) & 0xff]));
+  return buildSignature(signature, [(signature[64]! + 27) & 0xff]);
 }
 
 export async function ethSignTypedMessage(
@@ -360,5 +343,5 @@ export async function ethSignTypedMessage(
       ? await antikleptoFinish(channel, response, hostNonce)
       : unwrapDirectSignature(response);
 
-  return buildSignature(signature, new Uint8Array([(signature[64]! + 27) & 0xff]));
+  return buildSignature(signature, [(signature[64]! + 27) & 0xff]);
 }

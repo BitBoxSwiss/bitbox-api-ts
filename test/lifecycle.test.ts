@@ -20,7 +20,7 @@ import {
   publicKeyFromPrivateKey,
   type HandshakeFinalState,
 } from '../src/internal/noise.js';
-import type { PairingTransport } from '../src/internal/pairing.js';
+import type { EncryptedChannel, PairingTransport } from '../src/internal/pairing.js';
 import { hwwSuccess as success, pinned32 } from './utils.js';
 
 const OP_UNLOCK = 0x75;
@@ -108,6 +108,14 @@ function makeSession(
 
 function asBitboxError(err: unknown): BitboxError {
   return ensureError(err);
+}
+
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
 }
 
 describe('BitBox lifecycle', () => {
@@ -271,6 +279,7 @@ describe('PairedBitBox lifecycle', () => {
   it('raw new PairedBitBox(): promise-returning methods reject with invalid-state', async () => {
     const p = new PairedBitBox();
     await expect(p.deviceInfo()).rejects.toMatchObject({ code: 'invalid-state' });
+    await expect(p.rootFingerprint()).rejects.toMatchObject({ code: 'invalid-state' });
     await expect(p.btcXpub('btc', [0], 'xpub', false)).rejects.toMatchObject({ code: 'invalid-state' });
     await expect(p.ethXpub("m/44'/60'/0'/0/0")).rejects.toMatchObject({ code: 'invalid-state' });
     await expect(p.ethAddress(1n, "m/44'/60'/0'/0/0", false)).rejects.toMatchObject({ code: 'invalid-state' });
@@ -292,7 +301,7 @@ describe('PairedBitBox lifecycle', () => {
     const paired = await pairing.waitConfirm();
 
     expect(paired.product()).toBe('bitbox02-multi');
-    await expect(paired.deviceInfo()).rejects.toMatchObject({ code: 'not-implemented' });
+    await expect(paired.changePassword()).rejects.toMatchObject({ code: 'not-implemented' });
     await expect(paired.btcXpub('btc', [0], 'xpub', false)).rejects.toMatchObject({ code: 'unsupported' });
 
     paired.close();
@@ -307,7 +316,37 @@ describe('PairedBitBox lifecycle', () => {
     expect(() => paired.product()).toThrowError();
     try { paired.product(); } catch (err) { expect(asBitboxError(err).code).toBe('invalid-state'); }
     await expect(paired.deviceInfo()).rejects.toMatchObject({ code: 'invalid-state' });
+    await expect(paired.rootFingerprint()).rejects.toMatchObject({ code: 'invalid-state' });
     await expect(paired.btcXpub('btc', [0], 'xpub', false)).rejects.toMatchObject({ code: 'invalid-state' });
     await expect(paired.ethXpub("m/44'/60'/0'/0/0")).rejects.toMatchObject({ code: 'invalid-state' });
+  });
+
+  it('methods called after close reject without waiting for a pending device call', async () => {
+    const queryStarted = deferred();
+    const channel: EncryptedChannel = {
+      async query(): Promise<Uint8Array> {
+        queryStarted.resolve();
+        return new Promise<Uint8Array>(() => {});
+      },
+    };
+    const close = vi.fn();
+    const paired = new PairedBitBox({ channel, info: INFO, close });
+
+    void paired.deviceInfo().catch(() => undefined);
+    await queryStarted.promise;
+
+    paired.close();
+
+    const postCloseResult = paired.rootFingerprint().then(
+      () => 'resolved',
+      err => asBitboxError(err).code,
+    );
+    await expect(Promise.race([
+      postCloseResult,
+      new Promise<string>((resolve) => {
+        setTimeout(() => resolve('pending'), 25);
+      }),
+    ])).resolves.toBe('invalid-state');
+    expect(close).toHaveBeenCalledTimes(1);
   });
 });

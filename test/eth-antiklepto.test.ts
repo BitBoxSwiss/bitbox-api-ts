@@ -3,7 +3,7 @@
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { sha256 } from '@noble/hashes/sha256';
 import { hexToBytes, utf8ToBytes as utf8 } from '@noble/hashes/utils';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   genHostNonce,
   hostCommit,
@@ -42,6 +42,26 @@ describe('genHostNonce', () => {
     expect(a.length).toBe(32);
     expect(b.length).toBe(32);
     expect(a).not.toEqual(b);
+  });
+
+  it('maps RNG failures to antiklepto errors', () => {
+    const originalCrypto = globalThis.crypto;
+    vi.stubGlobal('crypto', {
+      getRandomValues(): never {
+        throw new Error('rng unavailable');
+      },
+    });
+
+    try {
+      expect(() => genHostNonce()).toThrow(
+        expect.objectContaining({
+          code: 'antiklepto',
+          message: 'Antiklepto verification failed: Failed generating antiklepto host nonce',
+        }),
+      );
+    } finally {
+      vi.stubGlobal('crypto', originalCrypto);
+    }
   });
 });
 
@@ -115,7 +135,11 @@ describe('verifyEcdsa', () => {
     const corrupted = new Uint8Array(signature);
     corrupted[5] = (corrupted[5]! ^ 0x01) & 0xff;
     expect(() => verifyEcdsa(hostNonce, signerCommitment, corrupted)).toThrow(
-      expect.objectContaining({ code: 'antiklepto' }),
+      expect.objectContaining({
+        code: 'antiklepto',
+        message:
+          'Antiklepto verification failed: Could not verify that the host nonce was contributed to the signature. If this happens repeatedly, the device might be attempting to leak the seed through the signature.',
+      }),
     );
   });
 

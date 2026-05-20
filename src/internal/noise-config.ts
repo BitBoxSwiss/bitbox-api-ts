@@ -64,10 +64,6 @@ function bytesFromArray(value: unknown, field: string): Uint8Array {
   return Uint8Array.from(value);
 }
 
-function errorMessage(err: unknown, fallback: string): string {
-  return err instanceof Error && err.message ? err.message : fallback;
-}
-
 function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) {
     return false;
@@ -141,9 +137,8 @@ interface StorageLike {
 
 /**
  * Browser-default config. Uses the `Storage`-shaped `localStorage` global; on a
- * missing key it starts from an empty config. Malformed persisted JSON and
- * storage access failures propagate to the caller so pairing state is not
- * silently replaced.
+ * missing key, malformed persisted JSON, or storage read failure it starts from
+ * an empty config, matching the wasm package behavior.
  * @internal
  */
 export class LocalStorageNoiseConfig implements NoiseConfig {
@@ -166,8 +161,8 @@ export class LocalStorageNoiseConfig implements NoiseConfig {
         return emptyConfig();
       }
       return fromJson(raw);
-    } catch (err) {
-      throw noiseConfigError(errorMessage(err, 'could not read from localstorage'));
+    } catch {
+      return emptyConfig();
     }
   }
 

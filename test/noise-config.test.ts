@@ -106,26 +106,27 @@ describe('LocalStorageNoiseConfig', () => {
     expect(back.deviceStaticPubkeys).toEqual([]);
   });
 
-  it('throws when the stored JSON is malformed', () => {
+  it('returns an empty config when the stored JSON is malformed', () => {
     const fake = new FakeStorage();
     fake.setItem(LOCAL_STORAGE_CONFIG_KEY, '{ not json');
-    expect(() => new LocalStorageNoiseConfig(fake).read()).toThrow(
-      expect.objectContaining({ code: 'noise-config' }),
-    );
+    const back = new LocalStorageNoiseConfig(fake).read();
+    expect(back.appStaticPrivkey).toBeUndefined();
+    expect(back.deviceStaticPubkeys).toEqual([]);
   });
 
-  it('throws when getItem throws', () => {
+  it('returns an empty config when getItem throws', () => {
     const c = new LocalStorageNoiseConfig({
       getItem(): string | null {
         throw new Error('storage disabled');
       },
       setItem(): void {},
     });
-    expect(() => c.read()).toThrow(expect.objectContaining({ code: 'noise-config' }));
-    expect(() => c.read()).toThrow(/storage disabled/);
+    const back = c.read();
+    expect(back.appStaticPrivkey).toBeUndefined();
+    expect(back.deviceStaticPubkeys).toEqual([]);
   });
 
-  it('throws when persisted byte arrays do not contain exactly bytes', () => {
+  it('returns an empty config when persisted byte arrays are malformed', () => {
     const fake = new FakeStorage();
     fake.setItem(
       LOCAL_STORAGE_CONFIG_KEY,
@@ -134,10 +135,9 @@ describe('LocalStorageNoiseConfig', () => {
         device_static_pubkeys: [],
       }),
     );
-    expect(() => new LocalStorageNoiseConfig(fake).read()).toThrow(
-      expect.objectContaining({ code: 'noise-config' }),
-    );
-    expect(() => new LocalStorageNoiseConfig(fake).read()).toThrow(/32-byte/);
+    let back = new LocalStorageNoiseConfig(fake).read();
+    expect(back.appStaticPrivkey).toBeUndefined();
+    expect(back.deviceStaticPubkeys).toEqual([]);
 
     fake.setItem(
       LOCAL_STORAGE_CONFIG_KEY,
@@ -146,10 +146,9 @@ describe('LocalStorageNoiseConfig', () => {
         device_static_pubkeys: [Array.from({ length: 32 }, () => 256)],
       }),
     );
-    expect(() => new LocalStorageNoiseConfig(fake).read()).toThrow(
-      expect.objectContaining({ code: 'noise-config' }),
-    );
-    expect(() => new LocalStorageNoiseConfig(fake).read()).toThrow(/invalid byte/);
+    back = new LocalStorageNoiseConfig(fake).read();
+    expect(back.appStaticPrivkey).toBeUndefined();
+    expect(back.deviceStaticPubkeys).toEqual([]);
   });
 
   it('throws noise-config when storage writes fail', () => {

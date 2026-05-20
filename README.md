@@ -1,9 +1,9 @@
-# bitbox-api-ts
+# @bitboxswiss/bitbox-api
 
 Pure TypeScript library for integrating BitBox02 hardware wallets in browser
 applications.
 
-`bitbox-api-ts` is source-compatible with the current `bitbox-api`
+`@bitboxswiss/bitbox-api` is source-compatible with the current `bitbox-api`
 Rust/WASM package for the implemented surface, but it does not ship WASM and
 does not require a WASM init step.
 
@@ -20,7 +20,7 @@ does not require a WASM init step.
 ## Installation
 
 ```bash
-npm install bitbox-api-ts
+npm install @bitboxswiss/bitbox-api
 ```
 
 `@noble/ciphers`, `@noble/curves`, and `@noble/hashes` are peer dependencies so
@@ -43,7 +43,7 @@ For currently implemented methods, the intended migration is just the import
 name:
 
 ```ts
-import * as bitbox from 'bitbox-api-ts';
+import * as bitbox from '@bitboxswiss/bitbox-api';
 ```
 
 There is no `init()` call and no WASM loader. Existing Webpack/Vite WASM plugin
@@ -68,7 +68,7 @@ compatibility, but currently reject with typed errors as listed in
 ## Connecting and Pairing
 
 ```ts
-import * as bitbox from 'bitbox-api-ts';
+import * as bitbox from '@bitboxswiss/bitbox-api';
 
 async function connectBitBox(): Promise<bitbox.PairedBitBox | undefined> {
   try {
@@ -131,8 +131,10 @@ const address = await bb02.ethAddress(chainId, keypath, true);
 ```
 
 Transaction byte fields are big-endian `Uint8Array`s without a `0x` prefix.
-Pass `ethIdentifyCase()` for the optional recipient case hint when you derive
-the transaction from a hex address string.
+Returned signature byte fields are plain `number[]` arrays, matching the
+runtime shape of the old WASM package. Pass `ethIdentifyCase()` for the
+optional recipient case hint when you derive the transaction from a hex address
+string.
 
 ```ts
 function hexToBytes(hex: string): Uint8Array {

@@ -101,9 +101,21 @@ const RELAXED_FUNCTIONS: Record<string, string[]> = {
 };
 
 const RELAXED_TYPE_ALIASES: Record<string, string[]> = {
+  // Runtime-compatible correction: the old wasm package declared these byte
+  // returns as Uint8Array, but serde-wasm-bindgen returned plain JS arrays.
+  BtcSignMessageSignature: [
+    '{ sig: number[]; recid: number; electrumSig65: number[]; }',
+  ],
   // chainId widened to number | bigint to safely represent uint64 values
   Eth1559Transaction: [
     '{ chainId: number | bigint; nonce: Uint8Array; maxPriorityFeePerGas: Uint8Array; maxFeePerGas: Uint8Array; gasLimit: Uint8Array; recipient: Uint8Array; value: Uint8Array; data: Uint8Array; }',
+  ],
+  EthSignature: [
+    '{ r: number[]; s: number[]; v: number[]; }',
+  ],
+  CardanoXpub: ['number[]'],
+  CardanoShelleyWitness: [
+    '{ signature: number[]; publicKey: number[]; }',
   ],
 };
 

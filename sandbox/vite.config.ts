@@ -14,7 +14,7 @@ export default defineConfig({
     alias: {
       // Point the sandbox at the library source so edits in ../src/ hot-reload
       // without needing a rebuild.
-      'bitbox-api-ts': path.resolve(__dirname, '../src/index.ts'),
+      '@bitboxswiss/bitbox-api': path.resolve(__dirname, '../src/index.ts'),
     },
   },
   build: {

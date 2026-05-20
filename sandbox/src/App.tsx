@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useState } from 'react';
-import * as bitbox from 'bitbox-api-ts';
+import * as bitbox from '@bitboxswiss/bitbox-api';
 import './App.css';
 
 import { Ethereum } from './Ethereum';
@@ -86,7 +86,7 @@ function App() {
           <button onClick={() => bb02.close()}>Close connection</button>
         </div>
         <Accordion opened title="General">
-          <General />
+          <General bb02={bb02} />
         </Accordion>
         {bb02.ethSupported() && (
           <Accordion title="Ethereum">
@@ -124,7 +124,7 @@ function App() {
       )}
       <p className="portNote">
         This sandbox is backed by the in-tree{' '}
-        <a href="https://github.com/BitBoxSwiss/bitbox-api-ts">bitbox-api-ts</a>{' '}
+        <a href="https://github.com/BitBoxSwiss/bitbox-api-ts">@bitboxswiss/bitbox-api</a>{' '}
         package. It validates the current browser integration and currently
         wired flows; it is not intended to track full API parity.
       </p>

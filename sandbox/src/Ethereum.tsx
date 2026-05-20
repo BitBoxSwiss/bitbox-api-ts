@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { FormEvent, useState } from 'react';
-import * as bitbox from 'bitbox-api-ts';
+import * as bitbox from '@bitboxswiss/bitbox-api';
 
 import { ErrorNotification } from './ErrorNotification';
 
@@ -37,6 +37,10 @@ function ResultBlock({ value }: { value: string }) {
       <textarea rows={Math.min(value.split('\n').length + 2, 32)} readOnly defaultValue={value} />
     </div>
   );
+}
+
+function formatResult(value: unknown | undefined): string {
+  return value === undefined ? '' : JSON.stringify(value, null, 2);
 }
 
 function EthXPub({ bb02 }: Props) {
@@ -199,7 +203,7 @@ function EthSignTransaction({ bb02 }: Props) {
         <label>Transaction</label>
         <textarea value={txJson} onChange={e => setTxJson(e.target.value)} rows={9} />
         <button type="submit" disabled={running}>Sign transaction</button>
-        <ResultBlock value={result ? JSON.stringify(result, replaceUint8Arrays, 2) : ''} />
+        <ResultBlock value={formatResult(result)} />
         {err !== undefined && (
           <ErrorNotification message={err.message} code={err.code} onClose={() => setErr(undefined)} />
         )}
@@ -270,7 +274,7 @@ function EthSign1559Transaction({ bb02 }: Props) {
         <label>Transaction</label>
         <textarea value={txJson} onChange={e => setTxJson(e.target.value)} rows={9} />
         <button type="submit" disabled={running}>Sign EIP-1559 transaction</button>
-        <ResultBlock value={result ? JSON.stringify(result, replaceUint8Arrays, 2) : ''} />
+        <ResultBlock value={formatResult(result)} />
         {err !== undefined && (
           <ErrorNotification message={err.message} code={err.code} onClose={() => setErr(undefined)} />
         )}
@@ -320,7 +324,7 @@ function EthSignMessage({ bb02 }: Props) {
         <label>Message</label>
         <textarea value={msg} onChange={e => setMsg(e.target.value)} rows={4} />
         <button type="submit" disabled={running}>Sign message</button>
-        <ResultBlock value={result ? JSON.stringify(result, replaceUint8Arrays, 2) : ''} />
+        <ResultBlock value={formatResult(result)} />
         {err !== undefined && (
           <ErrorNotification message={err.message} code={err.code} onClose={() => setErr(undefined)} />
         )}
@@ -417,20 +421,13 @@ function EthSignTypedMessage({ bb02 }: Props) {
         <label>EIP-712 typed message</label>
         <textarea value={msg} onChange={e => setMsg(e.target.value)} rows={20} />
         <button type="submit" disabled={running}>Sign typed message</button>
-        <ResultBlock value={result ? JSON.stringify(result, replaceUint8Arrays, 2) : ''} />
+        <ResultBlock value={formatResult(result)} />
         {err !== undefined && (
           <ErrorNotification message={err.message} code={err.code} onClose={() => setErr(undefined)} />
         )}
       </form>
     </div>
   );
-}
-
-function replaceUint8Arrays(_key: string, value: unknown): unknown {
-  if (value instanceof Uint8Array) {
-    return Array.from(value, b => b.toString(16).padStart(2, '0')).join('');
-  }
-  return value;
 }
 
 const STREAMING_THRESHOLD = 6144;
@@ -507,7 +504,7 @@ function EthSign1559TransactionStreaming({ bb02 }: Props) {
           />
         </label>
         <button type="submit" disabled={running}>Sign streaming transaction</button>
-        <ResultBlock value={result ? JSON.stringify(result, replaceUint8Arrays, 2) : ''} />
+        <ResultBlock value={formatResult(result)} />
         {err !== undefined && (
           <ErrorNotification message={err.message} code={err.code} onClose={() => setErr(undefined)} />
         )}
@@ -583,7 +580,7 @@ function EthSignTypedMessageStreaming({ bb02 }: Props) {
           />
         </label>
         <button type="submit" disabled={running}>Sign streaming typed message</button>
-        <ResultBlock value={result ? JSON.stringify(result, replaceUint8Arrays, 2) : ''} />
+        <ResultBlock value={formatResult(result)} />
         {err !== undefined && (
           <ErrorNotification message={err.message} code={err.code} onClose={() => setErr(undefined)} />
         )}

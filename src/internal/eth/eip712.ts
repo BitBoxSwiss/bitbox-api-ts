@@ -65,25 +65,17 @@ function parseTypes(input: unknown): Record<string, Eip712TypeMember[]> {
 }
 
 export function parseEip712Message(input: unknown): Eip712Message {
-  let parsed: unknown = input;
-  if (typeof input === 'string') {
-    try {
-      parsed = JSON.parse(input);
-    } catch {
-      throw new TypedMessageError('Could not parse EIP-712 JSON message');
-    }
-  }
-  if (!isRecord(parsed) || typeof parsed.primaryType !== 'string') {
+  if (!isRecord(input) || typeof input.primaryType !== 'string') {
     throw new TypedMessageError('Could not parse EIP-712 JSON message');
   }
-  if (!isRecord(parsed.domain) || !isRecord(parsed.message)) {
+  if (!isRecord(input.domain) || !isRecord(input.message)) {
     throw new TypedMessageError('Could not parse EIP-712 JSON message');
   }
   return {
-    types: parseTypes(parsed.types),
-    primaryType: parsed.primaryType,
-    domain: parsed.domain,
-    message: parsed.message,
+    types: parseTypes(input.types),
+    primaryType: input.primaryType,
+    domain: input.domain,
+    message: input.message,
   };
 }
 
