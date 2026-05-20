@@ -117,7 +117,7 @@ Runtime dependencies should stay small, browser-safe, and audit-friendly.
 
 ## Sandbox
 
-The sandbox in `sandbox/` is for manual browser testing against real BitBox02
+The sandbox in `sandbox/` is for manual browser testing against real BitBox
 hardware through WebHID or BitBoxBridge:
 
 ```bash

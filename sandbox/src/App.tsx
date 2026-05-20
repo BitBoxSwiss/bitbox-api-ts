@@ -63,7 +63,7 @@ function App() {
     return (
       <div className="container">
         <h2>Pairing code</h2>
-        <p>Confirm the matching code on the BitBox02.</p>
+        <p>Confirm the matching code on the BitBox.</p>
         <pre>{pairingCode}</pre>
         {err !== undefined && (
           <ErrorNotification
@@ -79,7 +79,7 @@ function App() {
   if (bb02 !== undefined) {
     return (
       <div className="contentContainer">
-        <h2 style={{ textAlign: 'left' }}>BitBox02 sandbox</h2>
+        <h2 style={{ textAlign: 'left' }}>BitBox sandbox</h2>
         <div style={{ textAlign: 'left' }}>
           <p>Connection established.</p>
           &nbsp;
