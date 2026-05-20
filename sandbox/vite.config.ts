@@ -7,8 +7,9 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   root: __dirname,
+  base: command === 'build' ? '/bitbox-api-ts/' : '/',
   plugins: [react()],
   resolve: {
     alias: {
@@ -21,4 +22,4 @@ export default defineConfig({
     outDir: path.resolve(__dirname, 'dist'),
     emptyOutDir: true,
   },
-});
+}));
