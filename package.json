@@ -1,6 +1,6 @@
 {
   "name": "@bitboxswiss/bitbox-api",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A pure TypeScript library to interact with BitBox hardware wallets.",
   "license": "Apache-2.0",
   "type": "module",
@@ -23,6 +23,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "prepack": "npm run build",
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
