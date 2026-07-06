@@ -20,6 +20,12 @@ import {
   rootFingerprint as rootFingerprintImpl,
 } from './internal/device.js';
 import {
+  cardanoAddress as cardanoAddressImpl,
+  cardanoSignTransaction as cardanoSignTransactionImpl,
+  cardanoSupported as cardanoSupportedImpl,
+  cardanoXpubs as cardanoXpubsImpl,
+} from './internal/cardano/methods.js';
+import {
   ethAddress as ethAddressImpl,
   ethSign1559Transaction as ethSign1559TransactionImpl,
   ethSignMessage as ethSignMessageImpl,
@@ -773,34 +779,39 @@ export class PairedBitBox {
     );
   }
 
-  /** Cardano support is not implemented in this TypeScript iteration. */
+  /** Does this device support Cardano functionality? Currently this means BitBox02 Multi or Nova Multi. */
   cardanoSupported(): boolean {
-    this.#requireOpen('cardanoSupported');
-    return false;
+    return cardanoSupportedImpl(this.#requireOpen('cardanoSupported').info);
   }
 
-  /** Compatibility stub: Cardano support is not implemented in this TypeScript iteration. */
-  async cardanoXpubs(_keypaths: Keypath[]): Promise<CardanoXpubs> {
-    this.#requireOpen('cardanoXpubs');
-    throw unsupportedError('cardanoXpubs');
+  /**
+   * Query the device for xpubs. The result contains one xpub per requested keypath. Each xpub is
+   * 64 bytes: 32 byte chain code + 32 byte pubkey.
+   */
+  async cardanoXpubs(keypaths: Keypath[]): Promise<CardanoXpubs> {
+    return this.#runExclusive('cardanoXpubs', open =>
+      cardanoXpubsImpl(open.channel, open.info, keypaths),
+    );
   }
 
-  /** Compatibility stub: Cardano support is not implemented in this TypeScript iteration. */
+  /** Query the device for a Cardano address. */
   async cardanoAddress(
-    _network: CardanoNetwork,
-    _script_config: CardanoScriptConfig,
-    _display: boolean,
+    network: CardanoNetwork,
+    script_config: CardanoScriptConfig,
+    display: boolean,
   ): Promise<string> {
-    this.#requireOpen('cardanoAddress');
-    throw unsupportedError('cardanoAddress');
+    return this.#runExclusive('cardanoAddress', open =>
+      cardanoAddressImpl(open.channel, open.info, network, script_config, display),
+    );
   }
 
-  /** Compatibility stub: Cardano support is not implemented in this TypeScript iteration. */
+  /** Sign a Cardano transaction. */
   async cardanoSignTransaction(
-    _transaction: CardanoTransaction,
+    transaction: CardanoTransaction,
   ): Promise<CardanoSignTransactionResult> {
-    this.#requireOpen('cardanoSignTransaction');
-    throw unsupportedError('cardanoSignTransaction');
+    return this.#runExclusive('cardanoSignTransaction', open =>
+      cardanoSignTransactionImpl(open.channel, open.info, transaction),
+    );
   }
 
   /**
