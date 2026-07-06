@@ -25,6 +25,7 @@ import type {
 } from '../../index.js';
 import type { Info } from '../hww.js';
 import type { EncryptedChannel } from '../pairing.js';
+import { unexpectedResponse } from '../proto-query.js';
 import { genHostNonce, hostCommit, verifyEcdsa } from './antiklepto.js';
 import {
   buildStructTypes,
@@ -35,7 +36,7 @@ import {
   TypedMessageError,
 } from './eip712.js';
 import { parseKeypath } from './keypath.js';
-import { queryEth, unexpectedResponse } from './query.js';
+import { queryEth } from './query.js';
 import { handleEthDataStreaming } from './streaming.js';
 import { requireVersion, STREAMING_THRESHOLD } from './version.js';
 import { chainIdTooLargeError, invalidTypeError } from '../errors.js';
