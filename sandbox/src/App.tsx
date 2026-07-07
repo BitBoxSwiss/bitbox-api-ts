@@ -4,6 +4,7 @@ import { useState } from 'react';
 import * as bitbox from '@bitboxswiss/bitbox-api';
 import './App.css';
 
+import { Cardano } from './Cardano';
 import { Ethereum } from './Ethereum';
 import { General } from './General';
 import { ErrorNotification } from './ErrorNotification';
@@ -91,6 +92,11 @@ function App() {
         {bb02.ethSupported() && (
           <Accordion title="Ethereum">
             <Ethereum bb02={bb02} />
+          </Accordion>
+        )}
+        {bb02.cardanoSupported() && (
+          <Accordion title="Cardano">
+            <Cardano bb02={bb02} />
           </Accordion>
         )}
       </div>
