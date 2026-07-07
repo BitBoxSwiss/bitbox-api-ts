@@ -10,12 +10,12 @@ does not require a WASM init step.
 ## Status
 
 - **Implemented:** WebHID and BitBoxBridge transports, Noise XX pairing,
-  Ethereum xpub/address/signing methods, antiklepto, transaction data
-  streaming, EIP-712 typed messages, and `ethIdentifyCase()`.
-- **Stubbed with `code: 'unsupported'`:** BTC, Cardano, and BIP85 methods.
-- **Stubbed with `code: 'not-implemented'`:** `deviceInfo()`,
-  `rootFingerprint()`, `showMnemonic()`, and `changePassword()`.
-  `product()` and `version()` are implemented.
+  device metadata helpers, Ethereum xpub/address/signing methods, antiklepto,
+  transaction data streaming, EIP-712 typed messages, `ethIdentifyCase()`,
+  and Cardano xpub/address/signing methods.
+- **Stubbed with `code: 'unsupported'`:** BTC and BIP85 methods.
+- **Stubbed with `code: 'not-implemented'`:** `showMnemonic()` and
+  `changePassword()`.
 
 ## Installation
 
@@ -49,10 +49,10 @@ import * as bitbox from '@bitboxswiss/bitbox-api';
 There is no `init()` call and no WASM loader. Existing Webpack/Vite WASM plugin
 configuration from `bitbox-api` is not needed for this package.
 
-The first TypeScript iteration is Ethereum-focused. BTC, Cardano, BIP85, and a
-few general device helpers are still present in the public type surface for
+BTC and BIP85 methods are still present in the public type surface for
 compatibility, but currently reject with typed errors as listed in
-[Status](#status).
+[Status](#status). Ethereum, Cardano, and the general device helpers listed
+above are wired through the TypeScript transport.
 
 ## Browser Requirements
 
@@ -195,6 +195,66 @@ defaults to `true` when omitted.
 
 ```ts
 await bb02.ethSignTypedMessage(1n, keypath, typedData);
+```
+
+## Cardano Usage
+
+Cardano keypaths can be strings such as `m/1852'/1815'/0'/0/0` or number
+arrays. Coin amounts, fees, slots, withdrawals, and token amounts are `bigint`
+values; byte fields such as transaction hashes, policy IDs, asset names, pool
+key hashes, and DRep credential hashes are `Uint8Array`s.
+
+```ts
+if (!bb02.cardanoSupported()) {
+  throw new Error('This BitBox02 does not support Cardano');
+}
+
+const paymentKeypath = "m/1852'/1815'/0'/0/0";
+const stakeKeypath = "m/1852'/1815'/0'/2/0";
+
+const xpubs = await bb02.cardanoXpubs(["m/1852'/1815'/0'"]);
+const address = await bb02.cardanoAddress(
+  'mainnet',
+  {
+    pkhSkh: {
+      keypathPayment: paymentKeypath,
+      keypathStake: stakeKeypath,
+    },
+  },
+  true,
+);
+```
+
+Cardano transaction signing returns Shelley witnesses. Public keys and
+signatures are plain `number[]` arrays, matching the runtime shape of the old
+WASM package.
+
+```ts
+const result = await bb02.cardanoSignTransaction({
+  network: 'mainnet',
+  inputs: [
+    {
+      keypath: paymentKeypath,
+      prevOutHash: hexToBytes('59864ee73ca5d91098a32b3ce9811bac1996dcbaefa6b6247dcaafb5779c2538'),
+      prevOutIndex: 0,
+    },
+  ],
+  outputs: [
+    {
+      encodedAddress: address,
+      value: 1_000_000n,
+    },
+  ],
+  fee: 170_499n,
+  ttl: 41_115_811n,
+  certificates: [],
+  withdrawals: [],
+  validityIntervalStart: 41_110_811n,
+  allowZeroTTL: false,
+  tagCborSets: false,
+});
+
+console.log(result.shelleyWitnesses);
 ```
 
 ## Typed Errors

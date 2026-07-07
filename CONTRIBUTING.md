@@ -92,8 +92,10 @@ The package is intended as a drop-in TypeScript replacement for the current
 - Public errors must keep the `{ code, message, err? }` shape. New public error
   behavior should go through `src/internal/errors.ts` and match the compatibility
   taxonomy unless there is an explicit reason to extend it.
-- BTC, Cardano, and BIP85 methods remain compatibility stubs in this iteration.
-  Do not document or test them as implemented until their protocol support lands.
+- BTC and BIP85 methods remain compatibility stubs in this iteration. Do not
+  document or test them as implemented until their protocol support lands.
+- Cardano xpub, address, and transaction-signing support is implemented; keep
+  it aligned with the Rust/WASM reference behavior and simulator vectors.
 
 `test/api-snapshot.test.ts` compares the built `dist/index.d.ts` against the
 checked-in `test/fixtures/bitbox_api.d.ts` fixture. To refresh the fixture,
