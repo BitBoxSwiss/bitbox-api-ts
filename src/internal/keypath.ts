@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import type { Keypath } from '../../index.js';
-import { keypathParseError } from '../errors.js';
+import type { Keypath } from '../index.js';
+import { keypathParseError } from './errors.js';
 
 export const HARDENED = 0x80000000;
 

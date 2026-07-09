@@ -22,7 +22,6 @@ import {
 import {
   cardanoAddress as cardanoAddressImpl,
   cardanoSignTransaction as cardanoSignTransactionImpl,
-  cardanoSupported as cardanoSupportedImpl,
   cardanoXpubs as cardanoXpubsImpl,
 } from './internal/cardano/methods.js';
 import {
@@ -33,7 +32,7 @@ import {
   ethSignTypedMessage as ethSignTypedMessageImpl,
   ethXpub as ethXpubImpl,
 } from './internal/eth/methods.js';
-import type { HwwCommunication, Info } from './internal/hww.js';
+import { isMultiEdition, type HwwCommunication, type Info } from './internal/hww.js';
 import type { NoiseConfig } from './internal/noise-config.js';
 import {
   completePairing,
@@ -675,8 +674,7 @@ export class PairedBitBox {
 
   /** Does this device support ETH functionality? Currently this means BitBox02 Multi or Nova Multi. */
   ethSupported(): boolean {
-    const product = this.#requireOpen('ethSupported').info.product;
-    return product === 'bitbox02-multi' || product === 'bitbox02-nova-multi';
+    return isMultiEdition(this.#requireOpen('ethSupported').info);
   }
 
   /** Query the device for an Ethereum account xpub. */
@@ -781,7 +779,7 @@ export class PairedBitBox {
 
   /** Does this device support Cardano functionality? Currently this means BitBox02 Multi or Nova Multi. */
   cardanoSupported(): boolean {
-    return cardanoSupportedImpl(this.#requireOpen('cardanoSupported').info);
+    return isMultiEdition(this.#requireOpen('cardanoSupported').info);
   }
 
   /**

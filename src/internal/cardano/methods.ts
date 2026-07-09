@@ -22,7 +22,6 @@ import {
 import {
   CardanoAddressRequestSchema,
   CardanoNetwork as PbCardanoNetwork,
-  CardanoRequestSchema,
   CardanoScriptConfigSchema,
   CardanoScriptConfig_PkhSkhSchema,
   CardanoSignTransactionRequestSchema,
@@ -36,39 +35,19 @@ import {
   CardanoSignTransactionRequest_OutputSchema,
   CardanoSignTransactionRequest_WithdrawalSchema,
   CardanoXpubsRequestSchema,
-  type CardanoRequest,
-  type CardanoResponse,
   type CardanoScriptConfig as PbCardanoScriptConfig,
   type CardanoSignTransactionRequest_Certificate,
 } from '../../proto/gen/cardano_pb.js';
-import {
-  RequestSchema,
-  type Request,
-} from '../../proto/gen/hww_pb.js';
 import { invalidTypeError } from '../errors.js';
 import type { Info } from '../hww.js';
 import type { EncryptedChannel } from '../pairing.js';
-import { query, unexpectedResponse } from '../proto-query.js';
-import { parseKeypath } from '../eth/keypath.js';
-import { requireVersion } from '../eth/version.js';
+import { unexpectedResponse } from '../proto-query.js';
+import { parseKeypath } from '../keypath.js';
+import { validateUint32, validateUint64 } from '../utils.js';
+import { requireVersion } from '../version.js';
+import { queryCardano } from './query.js';
 
-const UINT32_MAX = 0xffffffff;
-const UINT64_MAX = (1n << 64n) - 1n;
 const CARDANO_TRANSACTION_DETAIL = 'wrong type for CardanoTransaction';
-
-function validateUint32(value: number, detail: string): number {
-  if (!Number.isInteger(value) || value < 0 || value > UINT32_MAX) {
-    throw invalidTypeError(detail);
-  }
-  return value;
-}
-
-function validateUint64(value: bigint, detail: string): bigint {
-  if (typeof value !== 'bigint' || value < 0n || value > UINT64_MAX) {
-    throw invalidTypeError(detail);
-  }
-  return value;
-}
 
 function mapNetwork(network: CardanoNetwork): PbCardanoNetwork {
   switch (network) {
@@ -219,36 +198,8 @@ function mapTransaction(transaction: CardanoTransaction) {
   });
 }
 
-function bytesArray(bytes: Uint8Array): number[] {
-  return Array.from(bytes);
-}
-
-async function queryCardano(
-  channel: EncryptedChannel,
-  cardanoRequest: CardanoRequest['request'],
-): Promise<CardanoResponse['response']> {
-  const request: Request = create(RequestSchema, {
-    request: {
-      case: 'cardano',
-      value: create(CardanoRequestSchema, { request: cardanoRequest }),
-    },
-  });
-  const response = await query(channel, request);
-  if (response.response.case !== 'cardano') {
-    throw unexpectedResponse();
-  }
-  if (response.response.value.response.case === undefined) {
-    throw unexpectedResponse('BitBox returned an empty Cardano response');
-  }
-  return response.response.value.response;
-}
-
 function requireCardanoVersion(info: Info): void {
   requireVersion(info, { major: 9, minor: 8, patch: 0 });
-}
-
-export function cardanoSupported(info: Info): boolean {
-  return info.product === 'bitbox02-multi' || info.product === 'bitbox02-nova-multi';
 }
 
 export async function cardanoXpubs(
@@ -266,7 +217,7 @@ export async function cardanoXpubs(
   if (response.case !== 'xpubs') {
     throw unexpectedResponse();
   }
-  return response.value.xpubs.map(bytesArray);
+  return response.value.xpubs.map(bytes => Array.from(bytes));
 }
 
 export async function cardanoAddress(
@@ -310,8 +261,8 @@ export async function cardanoSignTransaction(
   }
   return {
     shelleyWitnesses: response.value.shelleyWitnesses.map(witness => ({
-      publicKey: bytesArray(witness.publicKey),
-      signature: bytesArray(witness.signature),
+      publicKey: Array.from(witness.publicKey),
+      signature: Array.from(witness.signature),
     })),
   };
 }
