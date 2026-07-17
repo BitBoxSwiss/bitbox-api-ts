@@ -7,7 +7,7 @@ import { DeviceInfoRequestSchema } from '../proto/gen/bitbox02_system_pb.js';
 import { RootFingerprintRequestSchema } from '../proto/gen/common_pb.js';
 import { RequestSchema } from '../proto/gen/hww_pb.js';
 import type { EncryptedChannel } from './pairing.js';
-import { query, unexpectedResponse } from './eth/query.js';
+import { query, unexpectedResponse } from './proto-query.js';
 
 export async function deviceInfo(channel: EncryptedChannel): Promise<DeviceInfo> {
   const response = await query(channel, create(RequestSchema, {

@@ -38,6 +38,11 @@ export interface Info {
 }
 
 /** @internal */
+export function isMultiEdition(info: Info): boolean {
+  return info.product === 'bitbox02-multi' || info.product === 'bitbox02-nova-multi';
+}
+
+/** @internal */
 export interface Sleeper {
   sleep(ms: number): Promise<void>;
 }

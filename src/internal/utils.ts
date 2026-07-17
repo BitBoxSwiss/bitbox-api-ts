@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import { invalidTypeError } from './errors.js';
+
 export { concatBytes, hexToBytes, utf8ToBytes } from '@noble/hashes/utils';
+
+/** @internal */
+export const UINT32_MAX = 0xffffffff;
+/** @internal */
+export const UINT64_MAX = (1n << 64n) - 1n;
 
 /** @internal */
 export function sleep(ms: number): Promise<void> {
@@ -73,4 +80,20 @@ export function stripLeadingZeroes(input: Uint8Array): Uint8Array {
     i += 1;
   }
   return input.subarray(i);
+}
+
+/** @internal */
+export function validateUint32(value: number, detail: string): number {
+  if (!Number.isInteger(value) || value < 0 || value > UINT32_MAX) {
+    throw invalidTypeError(detail);
+  }
+  return value;
+}
+
+/** @internal */
+export function validateUint64(value: unknown, detail: string): bigint {
+  if (typeof value !== 'bigint' || value < 0n || value > UINT64_MAX) {
+    throw invalidTypeError(detail);
+  }
+  return value;
 }

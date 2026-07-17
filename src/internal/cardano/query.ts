@@ -2,10 +2,10 @@
 
 import { create } from '@bufbuild/protobuf';
 import {
-  ETHRequestSchema,
-  type ETHRequest,
-  type ETHResponse,
-} from '../../proto/gen/eth_pb.js';
+  CardanoRequestSchema,
+  type CardanoRequest,
+  type CardanoResponse,
+} from '../../proto/gen/cardano_pb.js';
 import {
   RequestSchema,
   type Request,
@@ -13,20 +13,20 @@ import {
 import type { EncryptedChannel } from '../pairing.js';
 import { query, unexpectedResponse } from '../proto-query.js';
 
-export async function queryEth(
+export async function queryCardano(
   channel: EncryptedChannel,
-  ethRequest: ETHRequest['request'],
-): Promise<ETHResponse['response']> {
-  const ethReq = create(ETHRequestSchema, { request: ethRequest });
+  cardanoRequest: CardanoRequest['request'],
+): Promise<CardanoResponse['response']> {
+  const cardanoReq = create(CardanoRequestSchema, { request: cardanoRequest });
   const wrapped: Request = create(RequestSchema, {
-    request: { case: 'eth', value: ethReq },
+    request: { case: 'cardano', value: cardanoReq },
   });
   const response = await query(channel, wrapped);
-  if (response.response.case !== 'eth') {
+  if (response.response.case !== 'cardano') {
     throw unexpectedResponse();
   }
   if (response.response.value.response.case === undefined) {
-    throw unexpectedResponse('BitBox returned an empty ETH response');
+    throw unexpectedResponse('BitBox returned an empty Cardano response');
   }
   return response.response.value.response;
 }

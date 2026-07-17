@@ -20,6 +20,11 @@ import {
   rootFingerprint as rootFingerprintImpl,
 } from './internal/device.js';
 import {
+  cardanoAddress as cardanoAddressImpl,
+  cardanoSignTransaction as cardanoSignTransactionImpl,
+  cardanoXpubs as cardanoXpubsImpl,
+} from './internal/cardano/methods.js';
+import {
   ethAddress as ethAddressImpl,
   ethSign1559Transaction as ethSign1559TransactionImpl,
   ethSignMessage as ethSignMessageImpl,
@@ -27,7 +32,7 @@ import {
   ethSignTypedMessage as ethSignTypedMessageImpl,
   ethXpub as ethXpubImpl,
 } from './internal/eth/methods.js';
-import type { HwwCommunication, Info } from './internal/hww.js';
+import { isMultiEdition, type HwwCommunication, type Info } from './internal/hww.js';
 import type { NoiseConfig } from './internal/noise-config.js';
 import {
   completePairing,
@@ -669,8 +674,7 @@ export class PairedBitBox {
 
   /** Does this device support ETH functionality? Currently this means BitBox02 Multi or Nova Multi. */
   ethSupported(): boolean {
-    const product = this.#requireOpen('ethSupported').info.product;
-    return product === 'bitbox02-multi' || product === 'bitbox02-nova-multi';
+    return isMultiEdition(this.#requireOpen('ethSupported').info);
   }
 
   /** Query the device for an Ethereum account xpub. */
@@ -773,34 +777,39 @@ export class PairedBitBox {
     );
   }
 
-  /** Cardano support is not implemented in this TypeScript iteration. */
+  /** Does this device support Cardano functionality? Currently this means BitBox02 Multi or Nova Multi. */
   cardanoSupported(): boolean {
-    this.#requireOpen('cardanoSupported');
-    return false;
+    return isMultiEdition(this.#requireOpen('cardanoSupported').info);
   }
 
-  /** Compatibility stub: Cardano support is not implemented in this TypeScript iteration. */
-  async cardanoXpubs(_keypaths: Keypath[]): Promise<CardanoXpubs> {
-    this.#requireOpen('cardanoXpubs');
-    throw unsupportedError('cardanoXpubs');
+  /**
+   * Query the device for xpubs. The result contains one xpub per requested keypath. Each xpub is
+   * 64 bytes: 32 byte chain code + 32 byte pubkey.
+   */
+  async cardanoXpubs(keypaths: Keypath[]): Promise<CardanoXpubs> {
+    return this.#runExclusive('cardanoXpubs', open =>
+      cardanoXpubsImpl(open.channel, open.info, keypaths),
+    );
   }
 
-  /** Compatibility stub: Cardano support is not implemented in this TypeScript iteration. */
+  /** Query the device for a Cardano address. */
   async cardanoAddress(
-    _network: CardanoNetwork,
-    _script_config: CardanoScriptConfig,
-    _display: boolean,
+    network: CardanoNetwork,
+    script_config: CardanoScriptConfig,
+    display: boolean,
   ): Promise<string> {
-    this.#requireOpen('cardanoAddress');
-    throw unsupportedError('cardanoAddress');
+    return this.#runExclusive('cardanoAddress', open =>
+      cardanoAddressImpl(open.channel, open.info, network, script_config, display),
+    );
   }
 
-  /** Compatibility stub: Cardano support is not implemented in this TypeScript iteration. */
+  /** Sign a Cardano transaction. */
   async cardanoSignTransaction(
-    _transaction: CardanoTransaction,
+    transaction: CardanoTransaction,
   ): Promise<CardanoSignTransactionResult> {
-    this.#requireOpen('cardanoSignTransaction');
-    throw unsupportedError('cardanoSignTransaction');
+    return this.#runExclusive('cardanoSignTransaction', open =>
+      cardanoSignTransactionImpl(open.channel, open.info, transaction),
+    );
   }
 
   /**

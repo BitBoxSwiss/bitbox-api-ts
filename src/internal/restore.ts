@@ -3,9 +3,9 @@
 import { create } from '@bufbuild/protobuf';
 import { RequestSchema } from '../proto/gen/hww_pb.js';
 import { RestoreFromMnemonicRequestSchema } from '../proto/gen/mnemonic_pb.js';
-import { query } from './eth/query.js';
 import { CODE_UNEXPECTED_RESPONSE, makeError } from './errors.js';
 import type { EncryptedChannel } from './pairing.js';
+import { query } from './proto-query.js';
 
 const UINT32_MAX = 0xffffffff;
 

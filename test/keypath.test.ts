@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { describe, expect, it } from 'vitest';
-import { HARDENED, parseKeypath } from '../src/internal/eth/keypath.js';
+import { HARDENED, parseKeypath } from '../src/internal/keypath.js';
 
 describe('parseKeypath', () => {
   it('parses unhardened path', () => {

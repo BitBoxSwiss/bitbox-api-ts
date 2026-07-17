@@ -4,43 +4,12 @@ import { FormEvent, useState } from 'react';
 import * as bitbox from '@bitboxswiss/bitbox-api';
 
 import { ErrorNotification } from './ErrorNotification';
+import { ResultBlock, formatResult, hexToBytes } from './form-utils';
 
 type Props = { bb02: bitbox.PairedBitBox };
 
-function hexToBytes(hex: string): Uint8Array {
-  const body = hex.startsWith('0x') || hex.startsWith('0X') ? hex.slice(2) : hex;
-  if (body.length % 2 !== 0) {
-    throw new Error(`invalid hex length: ${hex}`);
-  }
-  const out = new Uint8Array(body.length / 2);
-  for (let i = 0; i < out.length; i += 1) {
-    const byte = Number.parseInt(body.slice(i * 2, i * 2 + 2), 16);
-    if (Number.isNaN(byte)) {
-      throw new Error(`invalid hex digit in ${hex}`);
-    }
-    out[i] = byte;
-  }
-  return out;
-}
-
 function stringToBytes(s: string): Uint8Array {
   return new TextEncoder().encode(s);
-}
-
-function ResultBlock({ value }: { value: string }) {
-  if (value === '') {
-    return null;
-  }
-  return (
-    <div className="resultContainer">
-      <label>Result</label>
-      <textarea rows={Math.min(value.split('\n').length + 2, 32)} readOnly defaultValue={value} />
-    </div>
-  );
-}
-
-function formatResult(value: unknown | undefined): string {
-  return value === undefined ? '' : JSON.stringify(value, null, 2);
 }
 
 function EthXPub({ bb02 }: Props) {

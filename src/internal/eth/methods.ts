@@ -25,6 +25,7 @@ import type {
 } from '../../index.js';
 import type { Info } from '../hww.js';
 import type { EncryptedChannel } from '../pairing.js';
+import { unexpectedResponse } from '../proto-query.js';
 import { genHostNonce, hostCommit, verifyEcdsa } from './antiklepto.js';
 import {
   buildStructTypes,
@@ -34,23 +35,21 @@ import {
   parseType,
   TypedMessageError,
 } from './eip712.js';
-import { parseKeypath } from './keypath.js';
-import { queryEth, unexpectedResponse } from './query.js';
+import { parseKeypath } from '../keypath.js';
+import { queryEth } from './query.js';
 import { handleEthDataStreaming } from './streaming.js';
-import { requireVersion, STREAMING_THRESHOLD } from './version.js';
+import { STREAMING_THRESHOLD } from './version.js';
+import { requireVersion } from '../version.js';
 import { chainIdTooLargeError, invalidTypeError } from '../errors.js';
-import { bigUintToBytesBE, stripLeadingZeroes } from '../utils.js';
+import {
+  bigUintToBytesBE,
+  stripLeadingZeroes,
+  UINT64_MAX,
+  validateUint64,
+} from '../utils.js';
 
-const UINT64_MAX = (1n << 64n) - 1n;
 const ETH_TX_DETAIL = 'wrong type for EthTransaction';
 const ETH_1559_TX_DETAIL = 'wrong type for Eth1559Transaction';
-
-function validateUint64(value: unknown, detail: string): bigint {
-  if (typeof value !== 'bigint' || value < 0n || value > UINT64_MAX) {
-    throw invalidTypeError(detail);
-  }
-  return value;
-}
 
 function validateSafeUint64Number(value: number, detail: string): bigint {
   if (!Number.isSafeInteger(value) || value < 0) {
