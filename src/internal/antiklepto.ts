@@ -29,14 +29,11 @@ export function hostCommit(hostNonce: Uint8Array): Uint8Array {
   return taggedSha256(HOST_COMMIT_TAG, hostNonce);
 }
 
-export function verifyEcdsa(
+function verifyEcdsaInner(
   hostNonce: Uint8Array,
   signerCommitment: Uint8Array,
   signature: Uint8Array,
 ): void {
-  if (signature.length !== 65) {
-    throw antikleptoError('signature must be 65 bytes');
-  }
   let point;
   try {
     point = secp256k1.ProjectivePoint.fromHex(signerCommitment);
@@ -63,4 +60,26 @@ export function verifyEcdsa(
       throw antikleptoError(VERIFICATION_FAILED_MESSAGE);
     }
   }
+}
+
+export function verifyEcdsa(
+  hostNonce: Uint8Array,
+  signerCommitment: Uint8Array,
+  signature: Uint8Array,
+): void {
+  if (signature.length !== 65) {
+    throw antikleptoError('signature must be 65 bytes');
+  }
+  verifyEcdsaInner(hostNonce, signerCommitment, signature);
+}
+
+export function verifyEcdsaCompact(
+  hostNonce: Uint8Array,
+  signerCommitment: Uint8Array,
+  signature: Uint8Array,
+): void {
+  if (signature.length !== 64) {
+    throw antikleptoError('signature must be 64 bytes');
+  }
+  verifyEcdsaInner(hostNonce, signerCommitment, signature);
 }

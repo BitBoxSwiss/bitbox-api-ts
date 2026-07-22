@@ -1,6 +1,6 @@
 {
   "name": "@bitboxswiss/bitbox-api",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A pure TypeScript library to interact with BitBox hardware wallets.",
   "license": "Apache-2.0",
   "type": "module",
@@ -52,6 +52,7 @@
     "eslint": "10.2.1",
     "react": "18.3.1",
     "react-dom": "18.3.1",
+    "tiny-secp256k1": "2.2.4",
     "typescript": "6.0.3",
     "typescript-eslint": "8.59.0",
     "vite": "6.4.2",
@@ -61,6 +62,7 @@
     "bitbox",
     "bitbox02",
     "hardware-wallet",
+    "bitcoin",
     "ethereum",
     "typescript"
   ],
@@ -70,7 +72,9 @@
   },
   "homepage": "https://bitbox.swiss/",
   "dependencies": {
-    "@bufbuild/protobuf": "2.11.0"
+    "@bufbuild/protobuf": "2.11.0",
+    "bitcoinjs-lib": "7.0.1",
+    "bs58check": "4.0.0"
   },
   "peerDependencies": {
     "@noble/ciphers": "^1.3.0",

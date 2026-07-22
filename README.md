@@ -3,17 +3,14 @@
 Pure TypeScript library for integrating BitBox02 hardware wallets in browser
 applications.
 
-`@bitboxswiss/bitbox-api` is source-compatible with the current `bitbox-api`
-Rust/WASM package for the implemented surface, but it does not ship WASM and
-does not require a WASM init step.
-
 ## Status
 
 - **Implemented:** WebHID and BitBoxBridge transports, Noise XX pairing,
-  device metadata helpers, Ethereum xpub/address/signing methods, antiklepto,
-  transaction data streaming, EIP-712 typed messages, `ethIdentifyCase()`,
-  and Cardano xpub/address/signing methods.
-- **Stubbed with `code: 'unsupported'`:** BTC and BIP85 methods.
+  device metadata helpers, Bitcoin xpub/address/PSBT/message signing methods,
+  script config registration, Ethereum xpub/address/signing methods,
+  antiklepto, transaction data streaming, EIP-712 typed messages,
+  `ethIdentifyCase()`, and Cardano xpub/address/signing methods.
+- **Stubbed with `code: 'unsupported'`:** BIP85 methods.
 - **Stubbed with `code: 'not-implemented'`:** `showMnemonic()` and
   `changePassword()`.
 
@@ -25,6 +22,8 @@ npm install @bitboxswiss/bitbox-api
 
 `@noble/ciphers`, `@noble/curves`, and `@noble/hashes` are peer dependencies so
 the library does not perturb the crypto dependency graph of wallet/Web3 apps.
+`bitcoinjs-lib`, used to parse and update PSBTs, is installed as a regular
+dependency.
 
 - **npm 7+** installs peer dependencies automatically.
 - **pnpm/yarn** peer handling depends on your package-manager version and
@@ -36,23 +35,6 @@ the library does not perturb the crypto dependency graph of wallet/Web3 apps.
   ```
 
 The package is ESM-only.
-
-## Migrating from `bitbox-api`
-
-For currently implemented methods, the intended migration is just the import
-name:
-
-```ts
-import * as bitbox from '@bitboxswiss/bitbox-api';
-```
-
-There is no `init()` call and no WASM loader. Existing Webpack/Vite WASM plugin
-configuration from `bitbox-api` is not needed for this package.
-
-BTC and BIP85 methods are still present in the public type surface for
-compatibility, but currently reject with typed errors as listed in
-[Status](#status). Ethereum, Cardano, and the general device helpers listed
-above are wired through the TypeScript transport.
 
 ## Browser Requirements
 
@@ -110,6 +92,48 @@ closed. Reconnect before retrying.
 
 Call `bb02.close()` when your app is done with the device. `close()` is
 idempotent and invokes the `onClose` callback supplied to the connect function.
+
+## Bitcoin Usage
+
+Bitcoin-family methods accept coin, keypath, script config, and xpub type
+strings. Keypaths can be strings or number arrays.
+
+```ts
+const account = "m/84'/0'/0'";
+const keypath = `${account}/0/0`;
+
+const xpub = await bb02.btcXpub('btc', account, 'xpub', false);
+const address = await bb02.btcAddress(
+  'btc',
+  keypath,
+  { simpleType: 'p2wpkh' },
+  true,
+);
+```
+
+`btcSignPSBT()` accepts and returns a base64-encoded PSBT. Single-signature
+P2WPKH, wrapped P2WPKH, and P2TR script configs are inferred from PSBT key
+origins. Pass `force_script_config` for multisig and policy wallets, which must
+first be registered on the device.
+
+```ts
+const signedPsbt = await bb02.btcSignPSBT(
+  'btc',
+  psbtBase64,
+  undefined,
+  'default',
+);
+
+const messageSignature = await bb02.btcSignMessage(
+  'btc',
+  { scriptConfig: { simpleType: 'p2wpkh' }, keypath },
+  new TextEncoder().encode('hello bitbox'),
+);
+```
+
+The returned PSBT contains the device signatures but is not finalized. Use a
+Bitcoin library to validate, combine, or finalize it as appropriate for the
+wallet.
 
 ## Ethereum Usage
 
@@ -289,11 +313,12 @@ Common client-facing codes include:
 - `user-abort` / `bitbox-user-abort`: the user cancelled in the browser or on
   the device.
 - `invalid-type`, `keypath-parse`, `chain-id-too-large`: invalid host inputs.
+- `psbt-parse` and `psbt-*`: malformed PSBTs or unsupported PSBT contents.
+- `btc-sign`: an invalid or incomplete Bitcoin signing exchange.
 - `communication`, `noise`, `noise-config`, `pairing-rejected`: transport,
   pairing, or encrypted-channel failures.
 - `version`: the connected firmware is too old for the requested method.
-- `unsupported` / `not-implemented`: public compatibility methods that are not
-  wired in this TypeScript iteration.
+- `unsupported` / `not-implemented`: methods that are not currently available.
 
 ## Sandbox and Development
 
@@ -307,13 +332,14 @@ make sandbox-dev
 
 Open the printed Vite URL, usually `http://localhost:5173`.
 
+The Bitcoin accordion covers xpubs, addresses, script config registration,
+PSBT signing, and message signing. Bitcoin unit tests are part of
+`npm run build && npm test`; the firmware transaction-vector suite runs against
+the simulator matrix with:
+
+```bash
+npm run test:sim -- test/simulator-btc.test.ts
+```
+
 For build, test, simulator, protobuf, and contribution workflow details, see
 [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## API Compatibility
-
-`test/api-snapshot.test.ts` compares the built TypeScript declarations against
-`../bitbox-api-rs/pkg/bitbox_api.d.ts` when the reference checkout is present.
-The guard keeps the public surface drop-in compatible while still allowing
-deliberate source-compatible TypeScript widenings, such as optional close
-callbacks and safer `bigint` chain ID paths.

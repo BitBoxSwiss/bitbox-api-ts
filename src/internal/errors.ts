@@ -41,12 +41,14 @@ export interface BitBoxError {
 /** @internal */ export const CODE_BITBOX_NOISE_ENCRYPT = 'bitbox-noise-encrypt';
 /** @internal */ export const CODE_BITBOX_NOISE_DECRYPT = 'bitbox-noise-decrypt';
 
-// PSBT error codes kept here for the public error surface, even before BTC support lands.
+// PSBT error codes exposed by Bitcoin signing.
 /** @internal */ export const CODE_PSBT_SIGN_ERROR = 'psbt-sign-error';
 /** @internal */ export const CODE_PSBT_KEY_NOT_UNIQUE = 'psbt-key-not-unique';
 /** @internal */ export const CODE_PSBT_KEY_NOT_FOUND = 'psbt-key-not-found';
 /** @internal */ export const CODE_PSBT_UNKNOWN_OUTPUT_TYPE = 'psbt-unknown-output-type';
 /** @internal */ export const CODE_PSBT_INVALID_OP_RETURN = 'psbt-invalid-op-return';
+/** @internal */ export const CODE_PSBT_INVALID_ACCOUNT_KEYPATH =
+  'psbt-invalid-account-keypath';
 
 // TS compatibility codes for methods or lifecycle states without a device roundtrip.
 /** @internal */ export const CODE_UNSUPPORTED = 'unsupported';
@@ -138,6 +140,21 @@ export function chainIdTooLargeError(chainId: bigint): TypedError {
 }
 
 /** @internal */
+export function btcSignError(detail: string): TypedError {
+  return makeError(CODE_BTC_SIGN, `Bitcoin transaction signing error: ${detail}`);
+}
+
+/** @internal */
+export function psbtParseError(detail: string): TypedError {
+  return makeError(CODE_PSBT_PARSE, `PSBT parse error: ${detail}`);
+}
+
+/** @internal */
+export function psbtError(code: string, detail: string): TypedError {
+  return makeError(code, `PSBT error: ${detail}`);
+}
+
+/** @internal */
 export function invalidTypeError(detail: string): TypedError {
   return makeError(CODE_INVALID_TYPE, `invalid JavaScript type: ${detail}`);
 }
@@ -199,6 +216,7 @@ const TYPED_PUBLIC_CODES = new Set<string>([
   CODE_PSBT_KEY_NOT_FOUND,
   CODE_PSBT_UNKNOWN_OUTPUT_TYPE,
   CODE_PSBT_INVALID_OP_RETURN,
+  CODE_PSBT_INVALID_ACCOUNT_KEYPATH,
   CODE_UNSUPPORTED,
   CODE_NOT_IMPLEMENTED,
   CODE_INVALID_STATE,

@@ -32,6 +32,15 @@ import {
   ethSignTypedMessage as ethSignTypedMessageImpl,
   ethXpub as ethXpubImpl,
 } from './internal/eth/methods.js';
+import {
+  btcAddress as btcAddressImpl,
+  btcIsScriptConfigRegistered as btcIsScriptConfigRegisteredImpl,
+  btcRegisterScriptConfig as btcRegisterScriptConfigImpl,
+  btcSignMessage as btcSignMessageImpl,
+  btcSignPSBT as btcSignPSBTImpl,
+  btcXpub as btcXpubImpl,
+  btcXpubs as btcXpubsImpl,
+} from './internal/btc/methods.js';
 import { isMultiEdition, type HwwCommunication, type Info } from './internal/hww.js';
 import type { NoiseConfig } from './internal/noise-config.js';
 import {
@@ -597,79 +606,105 @@ export class PairedBitBox {
     throw notImplementedError('changePassword');
   }
 
-  /** Compatibility stub: Bitcoin support is not implemented in this TypeScript iteration. */
+  /** Retrieves a Bitcoin-family account xpub. */
   async btcXpub(
-    _coin: BtcCoin,
-    _keypath: Keypath,
-    _xpub_type: XPubType,
-    _display: boolean,
+    coin: BtcCoin,
+    keypath: Keypath,
+    xpub_type: XPubType,
+    display: boolean,
   ): Promise<string> {
-    this.#requireOpen('btcXpub');
-    throw unsupportedError('btcXpub');
+    return this.#runExclusive('btcXpub', open =>
+      btcXpubImpl(open.channel, coin, keypath, xpub_type, display),
+    );
   }
 
-  /** Compatibility stub: Bitcoin support is not implemented in this TypeScript iteration. */
+  /** Retrieves multiple Bitcoin-family xpubs at once. */
   async btcXpubs(
-    _coin: BtcCoin,
-    _keypaths: Keypath[],
-    _xpub_type: BtcXPubsType,
+    coin: BtcCoin,
+    keypaths: Keypath[],
+    xpub_type: BtcXPubsType,
   ): Promise<BtcXpubs> {
-    this.#requireOpen('btcXpubs');
-    throw unsupportedError('btcXpubs');
+    return this.#runExclusive('btcXpubs', open =>
+      btcXpubsImpl(open.channel, open.info, coin, keypaths, xpub_type),
+    );
   }
 
-  /** Compatibility stub: Bitcoin support is not implemented in this TypeScript iteration. */
+  /** Checks whether a multisig or policy script config is registered. */
   async btcIsScriptConfigRegistered(
-    _coin: BtcCoin,
-    _script_config: BtcScriptConfig,
-    _keypath_account?: Keypath,
+    coin: BtcCoin,
+    script_config: BtcScriptConfig,
+    keypath_account?: Keypath,
   ): Promise<boolean> {
-    this.#requireOpen('btcIsScriptConfigRegistered');
-    throw unsupportedError('btcIsScriptConfigRegistered');
+    return this.#runExclusive('btcIsScriptConfigRegistered', open =>
+      btcIsScriptConfigRegisteredImpl(
+        open.channel,
+        coin,
+        script_config,
+        keypath_account,
+      ),
+    );
   }
 
-  /** Compatibility stub: Bitcoin support is not implemented in this TypeScript iteration. */
+  /** Registers a multisig or policy script config on the device. */
   async btcRegisterScriptConfig(
-    _coin: BtcCoin,
-    _script_config: BtcScriptConfig,
-    _keypath_account: Keypath | undefined,
-    _xpub_type: BtcRegisterXPubType,
-    _name?: string,
+    coin: BtcCoin,
+    script_config: BtcScriptConfig,
+    keypath_account: Keypath | undefined,
+    xpub_type: BtcRegisterXPubType,
+    name?: string,
   ): Promise<void> {
-    this.#requireOpen('btcRegisterScriptConfig');
-    throw unsupportedError('btcRegisterScriptConfig');
+    return this.#runExclusive('btcRegisterScriptConfig', open =>
+      btcRegisterScriptConfigImpl(
+        open.channel,
+        coin,
+        script_config,
+        keypath_account,
+        xpub_type,
+        name,
+      ),
+    );
   }
 
-  /** Compatibility stub: Bitcoin support is not implemented in this TypeScript iteration. */
+  /** Retrieves a Bitcoin-family address at the provided keypath. */
   async btcAddress(
-    _coin: BtcCoin,
-    _keypath: Keypath,
-    _script_config: BtcScriptConfig,
-    _display: boolean,
+    coin: BtcCoin,
+    keypath: Keypath,
+    script_config: BtcScriptConfig,
+    display: boolean,
   ): Promise<string> {
-    this.#requireOpen('btcAddress');
-    throw unsupportedError('btcAddress');
+    return this.#runExclusive('btcAddress', open =>
+      btcAddressImpl(open.channel, coin, keypath, script_config, display),
+    );
   }
 
-  /** Compatibility stub: Bitcoin support is not implemented in this TypeScript iteration. */
+  /** Signs a base64-encoded PSBT and returns the updated PSBT. */
   async btcSignPSBT(
-    _coin: BtcCoin,
-    _psbt: string,
-    _force_script_config: BtcScriptConfigWithKeypath | undefined,
-    _format_unit: BtcFormatUnit,
+    coin: BtcCoin,
+    psbt: string,
+    force_script_config: BtcScriptConfigWithKeypath | undefined,
+    format_unit: BtcFormatUnit,
   ): Promise<string> {
-    this.#requireOpen('btcSignPSBT');
-    throw unsupportedError('btcSignPSBT');
+    return this.#runExclusive('btcSignPSBT', open =>
+      btcSignPSBTImpl(
+        open.channel,
+        open.info,
+        coin,
+        psbt,
+        force_script_config,
+        format_unit,
+      ),
+    );
   }
 
-  /** Compatibility stub: Bitcoin support is not implemented in this TypeScript iteration. */
+  /** Signs a message using the provided Bitcoin script config. */
   async btcSignMessage(
-    _coin: BtcCoin,
-    _script_config: BtcScriptConfigWithKeypath,
-    _msg: Uint8Array,
+    coin: BtcCoin,
+    script_config: BtcScriptConfigWithKeypath,
+    msg: Uint8Array,
   ): Promise<BtcSignMessageSignature> {
-    this.#requireOpen('btcSignMessage');
-    throw unsupportedError('btcSignMessage');
+    return this.#runExclusive('btcSignMessage', open =>
+      btcSignMessageImpl(open.channel, open.info, coin, script_config, msg),
+    );
   }
 
   /** Does this device support ETH functionality? Currently this means BitBox02 Multi or Nova Multi. */
