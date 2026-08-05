@@ -478,9 +478,6 @@ export async function btcSignMessage(
     throw unexpectedResponse();
   }
   const signature = signatureResponse.value.signature;
-  if (signature.length !== 65) {
-    throw unexpectedResponse('signature must be 65 bytes');
-  }
   verifyEcdsa(hostNonce, response.value.commitment, signature);
 
   const sig = Array.from(signature.slice(0, 64));

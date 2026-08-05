@@ -3,6 +3,10 @@
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { sha256 } from '@noble/hashes/sha256';
 import { antikleptoError } from './errors.js';
+import {
+  validateSignatureCompact,
+  validateSignatureRecoverable,
+} from './secp256k1.js';
 import { bytesToBigIntBE, concatBytes, utf8ToBytes } from './utils.js';
 
 const HOST_COMMIT_TAG = utf8ToBytes('s2c/ecdsa/data');
@@ -67,8 +71,10 @@ export function verifyEcdsa(
   signerCommitment: Uint8Array,
   signature: Uint8Array,
 ): void {
-  if (signature.length !== 65) {
-    throw antikleptoError('signature must be 65 bytes');
+  try {
+    validateSignatureRecoverable(signature);
+  } catch (error) {
+    throw antikleptoError(error instanceof Error ? error.message : 'invalid ECDSA signature');
   }
   verifyEcdsaInner(hostNonce, signerCommitment, signature);
 }
@@ -78,8 +84,10 @@ export function verifyEcdsaCompact(
   signerCommitment: Uint8Array,
   signature: Uint8Array,
 ): void {
-  if (signature.length !== 64) {
-    throw antikleptoError('signature must be 64 bytes');
+  try {
+    validateSignatureCompact(signature);
+  } catch (error) {
+    throw antikleptoError(error instanceof Error ? error.message : 'invalid ECDSA signature');
   }
   verifyEcdsaInner(hostNonce, signerCommitment, signature);
 }

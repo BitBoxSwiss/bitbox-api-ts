@@ -9,6 +9,7 @@ import {
   hostCommit,
   taggedSha256,
   verifyEcdsa,
+  verifyEcdsaCompact,
 } from '../src/internal/antiklepto.js';
 import { bytesToBigIntBE } from '../src/internal/utils.js';
 import { bigIntToBytes32BE } from './utils.js';
@@ -89,7 +90,7 @@ function makeAntikleptoFixture(): {
   const r = finalUncompressed.slice(1, 33);
   const sig = new Uint8Array(65);
   sig.set(r, 0);
-  // s and recid don't matter for antiklepto verification.
+  // Use a valid low-S scalar and Ethereum recovery ID.
   sig.set(bigIntToBytes32BE(0x01n), 32);
   sig[64] = 0;
   return { hostNonce, signerCommitment, signature: sig };
@@ -161,10 +162,46 @@ describe('verifyEcdsa', () => {
     );
   });
 
-  it('rejects a wrong-length signature', () => {
-    const { hostNonce, signerCommitment } = makeAntikleptoFixture();
-    expect(() => verifyEcdsa(hostNonce, signerCommitment, new Uint8Array(64))).toThrow(
-      expect.objectContaining({ code: 'antiklepto' }),
-    );
+  it('accepts low-S and rejects its high-S counterpart', () => {
+    const { hostNonce, signerCommitment, signature } = makeAntikleptoFixture();
+    const highS = new Uint8Array(signature);
+    highS.set(bigIntToBytes32BE(secp256k1.CURVE.n - 1n), 32);
+
+    expect(() => verifyEcdsa(hostNonce, signerCommitment, signature)).not.toThrow();
+    expect(() => verifyEcdsa(hostNonce, signerCommitment, highS))
+      .toThrow(expect.objectContaining({
+        code: 'antiklepto',
+        message: 'Antiklepto verification failed: signature S must be low',
+      }));
+  });
+
+  it('validates compact signatures', () => {
+    const { hostNonce, signerCommitment, signature } = makeAntikleptoFixture();
+    const compact = signature.subarray(0, 64);
+    expect(() => verifyEcdsaCompact(hostNonce, signerCommitment, compact)).not.toThrow();
+
+    const highS = new Uint8Array(compact);
+    highS.set(bigIntToBytes32BE(secp256k1.CURVE.n - 1n), 32);
+    expect(() => verifyEcdsaCompact(hostNonce, signerCommitment, highS))
+      .toThrow(expect.objectContaining({
+        code: 'antiklepto',
+        message: 'Antiklepto verification failed: signature S must be low',
+      }));
+  });
+
+  it.each([2, 3])('accepts Ethereum recovery ID %i', (recoveryId) => {
+    const { hostNonce, signerCommitment, signature } = makeAntikleptoFixture();
+    signature[64] = recoveryId;
+    expect(() => verifyEcdsa(hostNonce, signerCommitment, signature)).not.toThrow();
+  });
+
+  it('rejects an out-of-range recovery ID', () => {
+    const { hostNonce, signerCommitment, signature } = makeAntikleptoFixture();
+    signature[64] = 4;
+    expect(() => verifyEcdsa(hostNonce, signerCommitment, signature))
+      .toThrow(expect.objectContaining({
+        code: 'antiklepto',
+        message: 'Antiklepto verification failed: signature recovery ID must be between 0 and 3',
+      }));
   });
 });
