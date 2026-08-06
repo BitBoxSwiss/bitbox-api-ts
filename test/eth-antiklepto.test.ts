@@ -9,7 +9,7 @@ import {
   hostCommit,
   taggedSha256,
   verifyEcdsa,
-} from '../src/internal/eth/antiklepto.js';
+} from '../src/internal/antiklepto.js';
 import { bytesToBigIntBE } from '../src/internal/utils.js';
 import { bigIntToBytes32BE } from './utils.js';
 

@@ -2,8 +2,8 @@
 
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { sha256 } from '@noble/hashes/sha256';
-import { antikleptoError } from '../errors.js';
-import { bytesToBigIntBE, concatBytes, utf8ToBytes } from '../utils.js';
+import { antikleptoError } from './errors.js';
+import { bytesToBigIntBE, concatBytes, utf8ToBytes } from './utils.js';
 
 const HOST_COMMIT_TAG = utf8ToBytes('s2c/ecdsa/data');
 const POINT_TWEAK_TAG = utf8ToBytes('s2c/ecdsa/point');

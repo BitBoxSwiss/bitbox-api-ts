@@ -16,7 +16,7 @@ import {
   ETHTypedMessageValueResponseSchema,
   ETHTypedMessageValueResponse_RootObject as RootObject,
 } from '../src/proto/gen/eth_pb.js';
-import { taggedSha256 } from '../src/internal/eth/antiklepto.js';
+import { taggedSha256 } from '../src/internal/antiklepto.js';
 import {
   ethAddress,
   ethSign1559Transaction,

@@ -26,7 +26,7 @@ import type {
 import type { Info } from '../hww.js';
 import type { EncryptedChannel } from '../pairing.js';
 import { unexpectedResponse } from '../proto-query.js';
-import { genHostNonce, hostCommit, verifyEcdsa } from './antiklepto.js';
+import { genHostNonce, hostCommit, verifyEcdsa } from '../antiklepto.js';
 import {
   buildStructTypes,
   DataType,
