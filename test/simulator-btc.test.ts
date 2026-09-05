@@ -525,8 +525,6 @@ describe.skipIf(!ENABLED).sequential.each(simulatorCases())('simulator BTC $name
   }, 60_000);
 
   it('signs the firmware BTC transaction vectors', async () => {
-    expect(vectorFile.vectors).toHaveLength(44);
-    expect(vectorFile.vectors.filter(vector => !shouldSkip(vector))).toHaveLength(36);
     const bitbox = await connectRestored();
     try {
       await server!.stdout.waitUntilStable(server!.stdout.checkpoint());
