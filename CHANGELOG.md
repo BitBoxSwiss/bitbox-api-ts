@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.0
+- Implement `showMnemonic()`, `changePassword()`, and `bip85AppBip39()` with the Rust/WASM firmware requirements
+
 ## 0.3.0
 - Add Bitcoin APIs, sandbox actions, and simulator transaction-vector coverage
 - Validate Bitcoin and Ethereum ECDSA signatures in Anti-Klepto and direct signing flows
