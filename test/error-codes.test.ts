@@ -27,6 +27,7 @@ import {
   CODE_NOT_IMPLEMENTED,
   CODE_PAIRING_REJECTED,
   CODE_PROTOBUF_DECODE,
+  CODE_PSBT_INVALID_ACCOUNT_KEYPATH,
   CODE_PSBT_INVALID_OP_RETURN,
   CODE_PSBT_KEY_NOT_FOUND,
   CODE_PSBT_KEY_NOT_UNIQUE,
@@ -146,6 +147,10 @@ const EXPECTED = {
     code: CODE_PSBT_INVALID_OP_RETURN,
     message: 'PSBT error: Invalid OP_RETURN script: <detail>',
   },
+  psbtInvalidAccountKeypath: {
+    code: CODE_PSBT_INVALID_ACCOUNT_KEYPATH,
+    message: 'PSBT error: Account script configs must contain a BIP44 account keypath.',
+  },
 } satisfies Record<string, ExpectedError>;
 
 function publicShape(err: { code: string; message: string }): ExpectedError {
@@ -192,6 +197,7 @@ describe('error code fixture', () => {
       EXPECTED.psbtKeyNotFound,
       EXPECTED.psbtUnknownOutputType,
       EXPECTED.psbtInvalidOpReturn,
+      EXPECTED.psbtInvalidAccountKeypath,
     ]).toEqual([
       { code: CODE_UNKNOWN, message: 'unknown error' },
       { code: CODE_NOISE, message: 'noise channel error' },
@@ -209,6 +215,10 @@ describe('error code fixture', () => {
       { code: CODE_PSBT_KEY_NOT_FOUND, message: 'PSBT error: Could not find our key in an input.' },
       { code: CODE_PSBT_UNKNOWN_OUTPUT_TYPE, message: 'PSBT error: Unrecognized/unsupported output type.' },
       { code: CODE_PSBT_INVALID_OP_RETURN, message: 'PSBT error: Invalid OP_RETURN script: <detail>' },
+      {
+        code: CODE_PSBT_INVALID_ACCOUNT_KEYPATH,
+        message: 'PSBT error: Account script configs must contain a BIP44 account keypath.',
+      },
     ]);
   });
 
@@ -282,6 +292,14 @@ describe('toPublicError', () => {
       CODE_ANTIKLEPTO,
       CODE_ETH_TYPED_MESSAGE,
       CODE_CHAIN_ID_TOO_LARGE,
+      CODE_BTC_SIGN,
+      CODE_PSBT_PARSE,
+      CODE_PSBT_SIGN_ERROR,
+      CODE_PSBT_KEY_NOT_UNIQUE,
+      CODE_PSBT_KEY_NOT_FOUND,
+      CODE_PSBT_UNKNOWN_OUTPUT_TYPE,
+      CODE_PSBT_INVALID_OP_RETURN,
+      CODE_PSBT_INVALID_ACCOUNT_KEYPATH,
       CODE_UNSUPPORTED,
       CODE_NOT_IMPLEMENTED,
       CODE_INVALID_STATE,

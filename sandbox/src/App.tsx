@@ -5,6 +5,7 @@ import * as bitbox from '@bitboxswiss/bitbox-api';
 import './App.css';
 
 import { Cardano } from './Cardano';
+import { Bitcoin } from './Bitcoin';
 import { Ethereum } from './Ethereum';
 import { General } from './General';
 import { ErrorNotification } from './ErrorNotification';
@@ -88,6 +89,9 @@ function App() {
         </div>
         <Accordion opened title="General">
           <General bb02={bb02} />
+        </Accordion>
+        <Accordion title="Bitcoin">
+          <Bitcoin bb02={bb02} />
         </Accordion>
         {bb02.ethSupported() && (
           <Accordion title="Ethereum">

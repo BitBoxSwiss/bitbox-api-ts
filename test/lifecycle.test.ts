@@ -302,7 +302,9 @@ describe('PairedBitBox lifecycle', () => {
 
     expect(paired.product()).toBe('bitbox02-multi');
     await expect(paired.changePassword()).rejects.toMatchObject({ code: 'not-implemented' });
-    await expect(paired.btcXpub('btc', [0], 'xpub', false)).rejects.toMatchObject({ code: 'unsupported' });
+    await expect(paired.btcXpub('btc', [0], 'xpub', false)).rejects.toMatchObject({
+      code: 'unexpected-response',
+    });
 
     paired.close();
     expect(close).toHaveBeenCalledTimes(1);

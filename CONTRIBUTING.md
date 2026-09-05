@@ -53,7 +53,7 @@ npm run test:sim
 
 On Linux x64, the harness downloads and caches the simulator binaries listed in
 `test/simulators.json` under `test/simulators/`, verifies their sha256 hashes,
-and starts the newest listed simulator by default.
+and runs the test matrix against every listed firmware version.
 
 Useful environment variables:
 
@@ -92,8 +92,9 @@ The package is intended as a drop-in TypeScript replacement for the current
 - Public errors must keep the `{ code, message, err? }` shape. New public error
   behavior should go through `src/internal/errors.ts` and match the compatibility
   taxonomy unless there is an explicit reason to extend it.
-- BTC and BIP85 methods remain compatibility stubs in this iteration. Do not
-  document or test them as implemented until their protocol support lands.
+- Bitcoin xpub, address, script config, PSBT, and message-signing support is
+  implemented; keep it aligned with the Rust/WASM reference and simulator
+  vectors. BIP85 methods remain compatibility stubs.
 - Cardano xpub, address, and transaction-signing support is implemented; keep
   it aligned with the Rust/WASM reference behavior and simulator vectors.
 

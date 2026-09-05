@@ -16,7 +16,7 @@ import {
   ETHTypedMessageValueResponseSchema,
   ETHTypedMessageValueResponse_RootObject as RootObject,
 } from '../src/proto/gen/eth_pb.js';
-import { taggedSha256 } from '../src/internal/eth/antiklepto.js';
+import { taggedSha256 } from '../src/internal/antiklepto.js';
 import {
   ethAddress,
   ethSign1559Transaction,
@@ -685,6 +685,30 @@ describe('ethSignTypedMessage', () => {
     await expect(
       ethSignTypedMessage(channel, info('9.25.0'), 1n, [0], TYPED_MSG, false),
     ).rejects.toMatchObject({ code: 'version' });
+  });
+
+  it('accepts recovery IDs up to 3 when antiklepto is disabled', async () => {
+    const signature = new Uint8Array(65);
+    signature.set(bigIntToBytes32BE(1n), 0);
+    signature.set(bigIntToBytes32BE(1n), 32);
+    signature[64] = 3;
+    const channel = new DynamicEthChannel((req) => {
+      expect(req.case).toBe('signTypedMsg');
+      return {
+        case: 'sign',
+        value: create(ETHSignResponseSchema, { signature }),
+      };
+    });
+
+    const result = await ethSignTypedMessage(
+      channel as any,
+      info('9.26.0'),
+      1n,
+      [0],
+      TYPED_MSG,
+      false,
+    );
+    expect(result.v).toEqual([3 + 27]);
   });
 
   it('rejects firmware <9.12.0', async () => {

@@ -20,6 +20,237 @@ export interface SimulatorCase {
   binaryPath: string;
 }
 
+export type SimulatorScreen =
+  | { type: 'confirm'; title: string; body: string }
+  | { type: 'transaction_address'; amount: string; address: string }
+  | { type: 'transaction_fee'; amount: string; fee: string }
+  | { type: 'status'; title: string; body: string }
+  | { type: 'swap'; title: string; from: string; to: string };
+
+function screenEndMarker(start: string): string | undefined {
+  switch (start) {
+    case 'CONFIRM SCREEN START':
+      return 'CONFIRM SCREEN END';
+    case 'CONFIRM TRANSACTION ADDRESS SCREEN START':
+      return 'CONFIRM TRANSACTION ADDRESS SCREEN END';
+    case 'CONFIRM TRANSACTION FEE SCREEN START':
+      return 'CONFIRM TRANSACTION FEE SCREEN END';
+    case 'STATUS SCREEN START':
+      return 'STATUS SCREEN END';
+    case 'CONFIRM SWAP SCREEN START':
+      return 'CONFIRM SWAP SCREEN END';
+    default:
+      return undefined;
+  }
+}
+
+function isScreenMarker(line: string): boolean {
+  return line.endsWith(' SCREEN START') || line.endsWith(' SCREEN END');
+}
+
+function parseScreenFields(
+  lines: string[],
+  blockLine: number,
+  fields: string[],
+): string[] {
+  const result: string[] = [];
+  let lineIndex = 0;
+  for (let fieldIndex = 0; fieldIndex < fields.length; fieldIndex += 1) {
+    const field = fields[fieldIndex]!;
+    const line = lines[lineIndex];
+    if (line === undefined) {
+      throw new Error(`simulator stdout line ${blockLine}: missing ${field} field`);
+    }
+    const prefix = `${field}: `;
+    if (!line.startsWith(prefix)) {
+      throw new Error(
+        `simulator stdout line ${blockLine}: expected ${JSON.stringify(prefix)}, got ${JSON.stringify(line)}`,
+      );
+    }
+    const valueLines = [line.slice(prefix.length)];
+    lineIndex += 1;
+    const nextField = fields[fieldIndex + 1];
+    if (nextField === undefined) {
+      valueLines.push(...lines.slice(lineIndex));
+      lineIndex = lines.length;
+    } else {
+      const nextPrefix = `${nextField}: `;
+      while (lineIndex < lines.length && !lines[lineIndex]!.startsWith(nextPrefix)) {
+        valueLines.push(lines[lineIndex]!);
+        lineIndex += 1;
+      }
+    }
+    result.push(valueLines.join('\n'));
+  }
+  return result;
+}
+
+function parseScreenBlock(
+  start: string,
+  lines: string[],
+  blockLine: number,
+): SimulatorScreen {
+  switch (start) {
+    case 'CONFIRM SCREEN START': {
+      const [title, body] = parseScreenFields(lines, blockLine, ['TITLE', 'BODY']);
+      return { type: 'confirm', title: title!, body: body! };
+    }
+    case 'CONFIRM TRANSACTION ADDRESS SCREEN START': {
+      const [amount, address] = parseScreenFields(lines, blockLine, ['AMOUNT', 'ADDRESS']);
+      return { type: 'transaction_address', amount: amount!, address: address! };
+    }
+    case 'CONFIRM TRANSACTION FEE SCREEN START': {
+      const [amount, fee] = parseScreenFields(lines, blockLine, ['AMOUNT', 'FEE']);
+      return { type: 'transaction_fee', amount: amount!, fee: fee! };
+    }
+    case 'STATUS SCREEN START': {
+      const titleLine = lines[0];
+      if (titleLine === undefined || !titleLine.startsWith('TITLE: ')) {
+        throw new Error(`simulator stdout line ${blockLine}: missing TITLE field`);
+      }
+      return {
+        type: 'status',
+        title: titleLine.slice('TITLE: '.length),
+        body: lines.slice(1).join('\n'),
+      };
+    }
+    case 'CONFIRM SWAP SCREEN START': {
+      const [title, from, to] = parseScreenFields(
+        lines,
+        blockLine,
+        ['TITLE', 'FROM', 'TO'],
+      );
+      return { type: 'swap', title: title!, from: from!, to: to! };
+    }
+    default:
+      throw new Error(`simulator stdout line ${blockLine}: unknown screen marker ${start}`);
+  }
+}
+
+export function parseSimulatorScreens(output: string): SimulatorScreen[] {
+  const lines = output.split(/\r?\n/);
+  if (lines.at(-1) === '') {
+    lines.pop();
+  }
+  const result: SimulatorScreen[] = [];
+  let index = 0;
+  while (index < lines.length) {
+    const start = lines[index]!;
+    const endMarker = screenEndMarker(start);
+    if (endMarker === undefined) {
+      if (isScreenMarker(start)) {
+        throw new Error(
+          `simulator stdout line ${index + 1}: unknown screen marker ${JSON.stringify(start)}`,
+        );
+      }
+      index += 1;
+      continue;
+    }
+    let end = index + 1;
+    while (end < lines.length && lines[end] !== endMarker) {
+      if (screenEndMarker(lines[end]!) !== undefined) {
+        throw new Error(
+          `simulator stdout line ${end + 1}: screen starting on line ${index + 1} contains a nested screen`,
+        );
+      }
+      if (isScreenMarker(lines[end]!)) {
+        throw new Error(
+          `simulator stdout line ${end + 1}: unexpected marker ${JSON.stringify(lines[end])}`,
+        );
+      }
+      end += 1;
+    }
+    if (end === lines.length) {
+      throw new Error(`simulator stdout line ${index + 1}: missing ${endMarker}`);
+    }
+    result.push(parseScreenBlock(start, lines.slice(index + 1, end), index + 1));
+    index = end + 1;
+  }
+  return result;
+}
+
+export class SimulatorStdoutSnapshot {
+  constructor(private readonly lines: string[]) {}
+
+  raw(): string {
+    return this.lines.length === 0 ? '' : `${this.lines.join('\n')}\n`;
+  }
+
+  screens(): SimulatorScreen[] {
+    return parseSimulatorScreens(this.raw());
+  }
+}
+
+export class SimulatorStdout {
+  private readonly lines: string[] = [];
+  private lastUpdate = Date.now();
+  private closed = false;
+
+  recordLine(line: string): void {
+    this.lines.push(line);
+    this.lastUpdate = Date.now();
+  }
+
+  markClosed(): void {
+    this.closed = true;
+  }
+
+  checkpoint(): number {
+    return this.lines.length;
+  }
+
+  snapshot(checkpoint: number): SimulatorStdoutSnapshot {
+    if (checkpoint > this.lines.length) {
+      throw new Error('simulator stdout checkpoint is out of bounds');
+    }
+    return new SimulatorStdoutSnapshot(this.lines.slice(checkpoint));
+  }
+
+  async waitUntilStable(
+    checkpoint: number,
+    stableForMs = 50,
+    timeoutMs = 5_000,
+  ): Promise<SimulatorStdoutSnapshot> {
+    const started = Date.now();
+    for (;;) {
+      const now = Date.now();
+      const lastUpdate = this.lines.length > checkpoint ? this.lastUpdate : started;
+      if (now - lastUpdate >= stableForMs || this.closed) {
+        return this.snapshot(checkpoint);
+      }
+      if (now - started >= timeoutMs) {
+        const snapshot = this.snapshot(checkpoint);
+        throw new Error(`waiting for stable simulator stdout timed out\n${snapshot.raw()}`);
+      }
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+  }
+
+  async waitForTerminalScreen(
+    checkpoint: number,
+    timeoutMs = 5_000,
+  ): Promise<SimulatorStdoutSnapshot> {
+    const started = Date.now();
+    for (;;) {
+      const snapshot = this.snapshot(checkpoint);
+      try {
+        if (snapshot.screens().at(-1)?.type === 'status') {
+          return snapshot;
+        }
+      } catch {
+        // A screen block may still be arriving; parse again after the next poll.
+      }
+      if (this.closed) {
+        throw new Error(`simulator stdout closed before terminal screen\n${snapshot.raw()}`);
+      }
+      if (Date.now() - started >= timeoutMs) {
+        throw new Error(`waiting for terminal simulator screen timed out\n${snapshot.raw()}`);
+      }
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+  }
+}
+
 function simulatorsJsonPath(): string {
   return path.join(__dirname, 'simulators.json');
 }
@@ -159,6 +390,7 @@ export async function ensureSimulator(simulator: SimulatorCase): Promise<string>
  */
 export class SimulatorServer {
   private readonly child: ChildProcess;
+  readonly stdout = new SimulatorStdout();
   readonly exited: Promise<void>;
 
   constructor(binaryPath: string) {
@@ -168,8 +400,17 @@ export class SimulatorServer {
     this.child = spawn('stdbuf', ['-oL', binaryPath], { stdio: ['ignore', 'pipe', 'pipe'] });
     this.child.stdout?.setEncoding('utf8');
     this.child.stderr?.setEncoding('utf8');
-    this.child.stdout?.on('data', (chunk: string) => forward(chunk, process.stdout, '[sim]'));
-    this.child.stderr?.on('data', (chunk: string) => forward(chunk, process.stderr, '[sim!]'));
+    const stdoutLines = new LineForwarder(process.stdout, '[sim]', (line) => {
+      this.stdout.recordLine(line);
+    });
+    const stderrLines = new LineForwarder(process.stderr, '[sim!]');
+    this.child.stdout?.on('data', (chunk: string) => stdoutLines.write(chunk));
+    this.child.stderr?.on('data', (chunk: string) => stderrLines.write(chunk));
+    this.child.stdout?.on('end', () => {
+      stdoutLines.end();
+      this.stdout.markClosed();
+    });
+    this.child.stderr?.on('end', () => stderrLines.end());
     this.exited = new Promise((resolve) => {
       this.child.once('exit', () => resolve());
     });
@@ -201,10 +442,34 @@ export class SimulatorServer {
   }
 }
 
-function forward(chunk: string, out: NodeJS.WritableStream, prefix: string): void {
-  for (const line of chunk.split(/\r?\n/)) {
-    if (line.length > 0) {
-      out.write(`\t\t${prefix} ${line}\n`);
+class LineForwarder {
+  private remainder = '';
+
+  constructor(
+    private readonly out: NodeJS.WritableStream,
+    private readonly prefix: string,
+    private readonly onLine?: (line: string) => void,
+  ) {}
+
+  write(chunk: string): void {
+    const lines = `${this.remainder}${chunk}`.split(/\r?\n/);
+    this.remainder = lines.pop() ?? '';
+    for (const line of lines) {
+      this.forward(line);
+    }
+  }
+
+  end(): void {
+    if (this.remainder.length > 0) {
+      this.forward(this.remainder);
+      this.remainder = '';
+    }
+  }
+
+  private forward(line: string): void {
+    this.onLine?.(line);
+    if (line.length > 0 && process.env.UPDATE_BTC_VECTOR_SCREENS !== '1') {
+      this.out.write(`\t\t${this.prefix} ${line}\n`);
     }
   }
 }

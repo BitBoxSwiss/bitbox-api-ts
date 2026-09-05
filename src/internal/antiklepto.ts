@@ -2,8 +2,12 @@
 
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { sha256 } from '@noble/hashes/sha256';
-import { antikleptoError } from '../errors.js';
-import { bytesToBigIntBE, concatBytes, utf8ToBytes } from '../utils.js';
+import { antikleptoError } from './errors.js';
+import {
+  validateSignatureCompact,
+  validateSignatureRecoverable,
+} from './secp256k1.js';
+import { bytesToBigIntBE, concatBytes, utf8ToBytes } from './utils.js';
 
 const HOST_COMMIT_TAG = utf8ToBytes('s2c/ecdsa/data');
 const POINT_TWEAK_TAG = utf8ToBytes('s2c/ecdsa/point');
@@ -29,14 +33,11 @@ export function hostCommit(hostNonce: Uint8Array): Uint8Array {
   return taggedSha256(HOST_COMMIT_TAG, hostNonce);
 }
 
-export function verifyEcdsa(
+function verifyEcdsaInner(
   hostNonce: Uint8Array,
   signerCommitment: Uint8Array,
   signature: Uint8Array,
 ): void {
-  if (signature.length !== 65) {
-    throw antikleptoError('signature must be 65 bytes');
-  }
   let point;
   try {
     point = secp256k1.ProjectivePoint.fromHex(signerCommitment);
@@ -63,4 +64,30 @@ export function verifyEcdsa(
       throw antikleptoError(VERIFICATION_FAILED_MESSAGE);
     }
   }
+}
+
+export function verifyEcdsa(
+  hostNonce: Uint8Array,
+  signerCommitment: Uint8Array,
+  signature: Uint8Array,
+): void {
+  try {
+    validateSignatureRecoverable(signature);
+  } catch (error) {
+    throw antikleptoError(error instanceof Error ? error.message : 'invalid ECDSA signature');
+  }
+  verifyEcdsaInner(hostNonce, signerCommitment, signature);
+}
+
+export function verifyEcdsaCompact(
+  hostNonce: Uint8Array,
+  signerCommitment: Uint8Array,
+  signature: Uint8Array,
+): void {
+  try {
+    validateSignatureCompact(signature);
+  } catch (error) {
+    throw antikleptoError(error instanceof Error ? error.message : 'invalid ECDSA signature');
+  }
+  verifyEcdsaInner(hostNonce, signerCommitment, signature);
 }

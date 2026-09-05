@@ -26,7 +26,8 @@ import type {
 import type { Info } from '../hww.js';
 import type { EncryptedChannel } from '../pairing.js';
 import { unexpectedResponse } from '../proto-query.js';
-import { genHostNonce, hostCommit, verifyEcdsa } from './antiklepto.js';
+import { genHostNonce, hostCommit, verifyEcdsa } from '../antiklepto.js';
+import { validateSignatureRecoverable } from '../secp256k1.js';
 import {
   buildStructTypes,
   DataType,
@@ -101,9 +102,6 @@ async function antikleptoFinish(
     throw unexpectedResponse('expected sign response after antiklepto');
   }
   const signature = sigResp.value.signature;
-  if (signature.length !== 65) {
-    throw unexpectedResponse('signature must be 65 bytes');
-  }
   verifyEcdsa(hostNonce, signerCommitment, signature);
   return signature;
 }
@@ -112,10 +110,13 @@ function unwrapDirectSignature(response: ETHResponse['response']): Uint8Array {
   if (response.case !== 'sign') {
     throw unexpectedResponse('expected sign response');
   }
-  if (response.value.signature.length !== 65) {
-    throw unexpectedResponse('signature must be 65 bytes');
+  const signature = response.value.signature;
+  try {
+    validateSignatureRecoverable(signature);
+  } catch {
+    throw unexpectedResponse('invalid ECDSA signature');
   }
-  return response.value.signature;
+  return signature;
 }
 
 function shapeLegacyV(recid: number, chainId: bigint): number[] {
