@@ -94,7 +94,9 @@ The package is intended as a drop-in TypeScript replacement for the current
   taxonomy unless there is an explicit reason to extend it.
 - Bitcoin xpub, address, script config, PSBT, and message-signing support is
   implemented; keep it aligned with the Rust/WASM reference and simulator
-  vectors. BIP85 methods remain compatibility stubs.
+  vectors.
+- Recovery-word display, password changes, and BIP85-BIP39 derivation are
+  implemented.
 - Cardano xpub, address, and transaction-signing support is implemented; keep
   it aligned with the Rust/WASM reference behavior and simulator vectors.
 

@@ -90,6 +90,96 @@ function DeviceInfo({ bb02 }: Props) {
   );
 }
 
+function ShowMnemonic({ bb02 }: Props) {
+  const [running, setRunning] = useState(false);
+  const [err, setErr] = useState<bitbox.Error>();
+
+  const actionShowMnemonic = async (e: FormEvent) => {
+    e.preventDefault();
+    setRunning(true);
+    setErr(undefined);
+    try {
+      await bb02.showMnemonic();
+    } catch (err) {
+      setErr(bitbox.ensureError(err));
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <>
+      <h4>Recovery Words</h4>
+      <form className="verticalForm" onSubmit={actionShowMnemonic}>
+        <button type="submit" disabled={running}>Show recovery words</button>
+        {err !== undefined && (
+          <ErrorNotification message={err.message} code={err.code} onClose={() => setErr(undefined)} />
+        )}
+      </form>
+    </>
+  );
+}
+
+function ChangePassword({ bb02 }: Props) {
+  const [running, setRunning] = useState(false);
+  const [err, setErr] = useState<bitbox.Error>();
+
+  const actionChangePassword = async (e: FormEvent) => {
+    e.preventDefault();
+    setRunning(true);
+    setErr(undefined);
+    try {
+      await bb02.changePassword();
+    } catch (err) {
+      setErr(bitbox.ensureError(err));
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <>
+      <h4>Change Password</h4>
+      <form className="verticalForm" onSubmit={actionChangePassword}>
+        <button type="submit" disabled={running}>Change password</button>
+        {err !== undefined && (
+          <ErrorNotification message={err.message} code={err.code} onClose={() => setErr(undefined)} />
+        )}
+      </form>
+    </>
+  );
+}
+
+function Bip85AppBip39({ bb02 }: Props) {
+  const [running, setRunning] = useState(false);
+  const [err, setErr] = useState<bitbox.Error>();
+
+  const actionBip85 = async (e: FormEvent) => {
+    e.preventDefault();
+    setRunning(true);
+    setErr(undefined);
+    try {
+      await bb02.bip85AppBip39();
+    } catch (err) {
+      setErr(bitbox.ensureError(err));
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <>
+      <h4>BIP-85</h4>
+      <form className="verticalForm" onSubmit={actionBip85}>
+        <button type="submit" disabled={running}>Invoke BIP-85 (BIP-39 app)</button>
+        {err !== undefined && (
+          <ErrorNotification message={err.message} code={err.code} onClose={() => setErr(undefined)} />
+        )}
+      </form>
+    </>
+  );
+}
+
 export function General({ bb02 }: Props) {
   return (
     <>
@@ -98,6 +188,15 @@ export function General({ bb02 }: Props) {
       </div>
       <div className="action">
         <DeviceInfo bb02={bb02} />
+      </div>
+      <div className="action">
+        <ShowMnemonic bb02={bb02} />
+      </div>
+      <div className="action">
+        <Bip85AppBip39 bb02={bb02} />
+      </div>
+      <div className="action">
+        <ChangePassword bb02={bb02} />
       </div>
     </>
   );

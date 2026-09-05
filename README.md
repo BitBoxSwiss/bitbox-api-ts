@@ -6,13 +6,11 @@ applications.
 ## Status
 
 - **Implemented:** WebHID and BitBoxBridge transports, Noise XX pairing,
-  device metadata helpers, Bitcoin xpub/address/PSBT/message signing methods,
+  device metadata helpers, recovery-word display, password changes, BIP85-BIP39
+  mnemonic derivation, Bitcoin xpub/address/PSBT/message signing methods,
   script config registration, Ethereum xpub/address/signing methods,
   antiklepto, transaction data streaming, EIP-712 typed messages,
   `ethIdentifyCase()`, and Cardano xpub/address/signing methods.
-- **Stubbed with `code: 'unsupported'`:** BIP85 methods.
-- **Stubbed with `code: 'not-implemented'`:** `showMnemonic()` and
-  `changePassword()`.
 
 ## Installation
 
@@ -92,6 +90,19 @@ closed. Reconnect before retrying.
 
 Call `bb02.close()` when your app is done with the device. `close()` is
 idempotent and invokes the `onClose` callback supplied to the connect function.
+
+## Device Workflows
+
+These workflows run on the device and resolve when complete:
+
+```ts
+await bb02.showMnemonic();      // Display the recovery words on the device.
+await bb02.changePassword();    // Change the password (firmware >=9.25.0).
+await bb02.bip85AppBip39();      // Derive and display a BIP39 mnemonic (firmware >=9.17.0).
+```
+
+For BIP85, the user selects the word count (12, 18, or 24) and derivation index
+on the device. Recovery words and derived mnemonics are not returned to the host.
 
 ## Bitcoin Usage
 
@@ -318,7 +329,6 @@ Common client-facing codes include:
 - `communication`, `noise`, `noise-config`, `pairing-rejected`: transport,
   pairing, or encrypted-channel failures.
 - `version`: the connected firmware is too old for the requested method.
-- `unsupported` / `not-implemented`: methods that are not currently available.
 
 ## Sandbox and Development
 
@@ -331,6 +341,9 @@ make sandbox-dev
 ```
 
 Open the printed Vite URL, usually `http://localhost:5173`.
+
+The General accordion covers device info, the root fingerprint, recovery-word
+display, password changes, and BIP85-BIP39 derivation.
 
 The Bitcoin accordion covers xpubs, addresses, script config registration,
 PSBT signing, and message signing. Bitcoin unit tests are part of

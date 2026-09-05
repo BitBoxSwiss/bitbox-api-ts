@@ -8,16 +8,17 @@ import {
 } from './internal/connect.js';
 import {
   CODE_INVALID_STATE,
-  CODE_NOT_IMPLEMENTED,
-  CODE_UNSUPPORTED,
   CODE_USER_ABORT,
   CODE_BITBOX_USER_ABORT,
   ensureTyped,
   toPublicError,
 } from './internal/errors.js';
 import {
+  bip85AppBip39 as bip85AppBip39Impl,
+  changePassword as changePasswordImpl,
   deviceInfo as deviceInfoImpl,
   rootFingerprint as rootFingerprintImpl,
+  showMnemonic as showMnemonicImpl,
 } from './internal/device.js';
 import {
   cardanoAddress as cardanoAddressImpl,
@@ -49,20 +50,6 @@ import {
   type EncryptedChannel,
   type PairingState,
 } from './internal/pairing.js';
-
-function unsupportedError(method: string): Error {
-  return {
-    code: CODE_UNSUPPORTED,
-    message: `${method} is not supported in @bitboxswiss/bitbox-api`,
-  };
-}
-
-function notImplementedError(method: string): Error {
-  return {
-    code: CODE_NOT_IMPLEMENTED,
-    message: `${method} is not yet implemented in @bitboxswiss/bitbox-api`,
-  };
-}
 
 function invalidStateError(method: string): Error {
   return {
@@ -594,16 +581,14 @@ export class PairedBitBox {
     return this.#runExclusive('rootFingerprint', open => rootFingerprintImpl(open.channel));
   }
 
-  /** Not implemented in this TypeScript iteration. */
+  /** Show recovery words on the BitBox. */
   async showMnemonic(): Promise<void> {
-    this.#requireOpen('showMnemonic');
-    throw notImplementedError('showMnemonic');
+    return this.#runExclusive('showMnemonic', open => showMnemonicImpl(open.channel));
   }
 
-  /** Not implemented in this TypeScript iteration. */
+  /** Invokes the password change workflow on the device. Requires firmware >=9.25.0. */
   async changePassword(): Promise<void> {
-    this.#requireOpen('changePassword');
-    throw notImplementedError('changePassword');
+    return this.#runExclusive('changePassword', open => changePasswordImpl(open.channel, open.info));
   }
 
   /** Retrieves a Bitcoin-family account xpub. */
@@ -851,11 +836,10 @@ export class PairedBitBox {
    * Invokes the BIP85-BIP39 workflow on the device, letting the user select the number of words
    * (12, 18, 24) and an index and display a derived BIP-39 mnemonic.
    *
-   * Compatibility stub: BIP85 support is not implemented in this TypeScript iteration.
+   * Requires firmware >=9.17.0.
    */
   async bip85AppBip39(): Promise<void> {
-    this.#requireOpen('bip85AppBip39');
-    throw unsupportedError('bip85AppBip39');
+    return this.#runExclusive('bip85AppBip39', open => bip85AppBip39Impl(open.channel, open.info));
   }
 }
 
