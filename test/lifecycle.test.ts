@@ -280,6 +280,8 @@ describe('PairedBitBox lifecycle', () => {
     const p = new PairedBitBox();
     await expect(p.deviceInfo()).rejects.toMatchObject({ code: 'invalid-state' });
     await expect(p.rootFingerprint()).rejects.toMatchObject({ code: 'invalid-state' });
+    await expect(p.showMnemonic()).rejects.toMatchObject({ code: 'invalid-state' });
+    await expect(p.changePassword()).rejects.toMatchObject({ code: 'invalid-state' });
     await expect(p.btcXpub('btc', [0], 'xpub', false)).rejects.toMatchObject({ code: 'invalid-state' });
     await expect(p.ethXpub("m/44'/60'/0'/0/0")).rejects.toMatchObject({ code: 'invalid-state' });
     await expect(p.ethAddress(1n, "m/44'/60'/0'/0/0", false)).rejects.toMatchObject({ code: 'invalid-state' });
@@ -301,7 +303,7 @@ describe('PairedBitBox lifecycle', () => {
     const paired = await pairing.waitConfirm();
 
     expect(paired.product()).toBe('bitbox02-multi');
-    await expect(paired.changePassword()).rejects.toMatchObject({ code: 'not-implemented' });
+    await expect(paired.changePassword()).rejects.toMatchObject({ code: 'version' });
     await expect(paired.btcXpub('btc', [0], 'xpub', false)).rejects.toMatchObject({
       code: 'unexpected-response',
     });
@@ -319,6 +321,9 @@ describe('PairedBitBox lifecycle', () => {
     try { paired.product(); } catch (err) { expect(asBitboxError(err).code).toBe('invalid-state'); }
     await expect(paired.deviceInfo()).rejects.toMatchObject({ code: 'invalid-state' });
     await expect(paired.rootFingerprint()).rejects.toMatchObject({ code: 'invalid-state' });
+    await expect(paired.showMnemonic()).rejects.toMatchObject({ code: 'invalid-state' });
+    await expect(paired.changePassword()).rejects.toMatchObject({ code: 'invalid-state' });
+    await expect(paired.bip85AppBip39()).rejects.toMatchObject({ code: 'invalid-state' });
     await expect(paired.btcXpub('btc', [0], 'xpub', false)).rejects.toMatchObject({ code: 'invalid-state' });
     await expect(paired.ethXpub("m/44'/60'/0'/0/0")).rejects.toMatchObject({ code: 'invalid-state' });
   });

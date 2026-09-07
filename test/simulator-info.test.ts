@@ -110,4 +110,30 @@ describe.skipIf(!ENABLED).sequential.each(simulatorCases())('simulator info prob
 
     expect(onCloseCalls).toBe(1);
   }, 30_000);
+
+  // Ported from bitbox-api-rs/tests/test_device.rs::test_change_password.
+  it('changePassword succeeds on supported firmware and rejects older versions', async () => {
+    const session = await connectSimulator(undefined, undefined, new NoiseConfigNoCache());
+    try {
+      const pairing = await performHandshake(session.hww, session.config);
+      const channel = await completePairing(pairing);
+      await restoreFromMnemonic(channel);
+      const paired = new PairedBitBox({ channel, info: session.hww.info, close: session.close });
+      try {
+        if (atLeast(version, { major: 9, minor: 25, patch: 0 })) {
+          await expect(paired.changePassword()).resolves.toBeUndefined();
+        } else {
+          await expect(paired.changePassword()).rejects.toMatchObject({
+            code: 'version',
+            message: 'firmware version >=9.25.0 required',
+          });
+        }
+      } finally {
+        paired.close();
+      }
+    } catch (err) {
+      session.close();
+      throw err;
+    }
+  }, 30_000);
 });
