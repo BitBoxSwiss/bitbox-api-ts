@@ -17,6 +17,7 @@ export type TransportErrorCode =
   | 'read'
   | 'u2f-decode'
   | 'info'
+  | 'resetSession'
   | 'version'
   | 'bridge'
   | 'simulator'

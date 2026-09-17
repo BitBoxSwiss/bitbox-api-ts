@@ -273,6 +273,7 @@ describe('toPublicError', () => {
     ['read', 'communication error: read error'],
     ['u2f-decode', 'communication error: u2f framing decoding error'],
     ['info', 'communication error: error querying device info'],
+    ['resetSession', 'communication error: error resetting session'],
   ] as const)('maps %s to communication', (code, message) => {
     expect(publicShape(toPublicError({ code, message: 'internal detail' }))).toEqual({
       code: CODE_COMMUNICATION,
