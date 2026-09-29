@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { create } from '@bufbuild/protobuf';
 import { BitBox, PairedBitBox } from '../src/index.js';
 import { connectSimulator, probeSimulatorInfo } from '../src/internal/connect-simulator.js';
 import { atLeast, parseSemver } from '../src/internal/hww.js';
 import { NoiseConfigNoCache } from '../src/internal/noise-config.js';
 import { completePairing, performHandshake } from '../src/internal/pairing.js';
 import { restoreFromMnemonic } from '../src/internal/restore.js';
+import { query } from '../src/internal/proto-query.js';
+import { RequestSchema } from '../src/proto/gen/hww_pb.js';
+import { BTCCoin, BTCScriptConfig_SimpleType, BTCSignNextResponse_Type } from '../src/proto/gen/btc_pb.js';
 import {
   SimulatorServer,
   ensureSimulator,
@@ -110,6 +114,53 @@ describe.skipIf(!ENABLED).sequential.each(simulatorCases())('simulator info prob
 
     expect(onCloseCalls).toBe(1);
   }, 30_000);
+
+  // Resetting an unfinished workflow requires firmware v9.28.0 or newer.
+  it.skipIf(!atLeast(version, { major: 9, minor: 28, patch: 0 }))(
+    'reconnects after disconnecting with an unfinished signing request', async () => {
+      const session = await connectSimulator();
+      try {
+        const pairing = await performHandshake(session.hww, session.config);
+        const channel = await completePairing(pairing);
+        await restoreFromMnemonic(channel);
+        // Leave the signing workflow waiting for its next request when the host disconnects.
+        const response = await query(channel, create(RequestSchema, {
+          request: {
+            case: 'btcSignInit',
+            value: {
+              coin: BTCCoin.BTC,
+              scriptConfigs: [{
+                scriptConfig: { config: { case: 'simpleType', value: BTCScriptConfig_SimpleType.P2WPKH } },
+                keypath: [84 + 0x80000000, 0x80000000, 0x80000000],
+              }],
+              version: 2,
+              numInputs: 1,
+              numOutputs: 1,
+            },
+          },
+        }));
+        expect(response.response.case).toBe('btcSignNext');
+        if (response.response.case !== 'btcSignNext') {
+          throw new Error('expected the firmware to request the first transaction input');
+        }
+        expect(response.response.value.type).toBe(BTCSignNextResponse_Type.INPUT);
+      } finally {
+        session.close();
+      }
+
+      // Reconnect to the same running simulator, preserving the firmware session state.
+      const reconnected = await connectSimulator();
+      try {
+        // Check the first setup response: unlockAndPair currently ignores unlock errors.
+        await expect(reconnected.hww.query(new Uint8Array([0x75])))
+          .resolves.toEqual(new Uint8Array([0x00]));
+        const pairing = await new BitBox(reconnected).unlockAndPair();
+        const paired = await pairing.waitConfirm();
+        await expect(paired.rootFingerprint()).resolves.toBe('4c00739d');
+      } finally {
+        reconnected.close();
+      }
+    }, 30_000);
 
   // Ported from bitbox-api-rs/tests/test_device.rs::test_change_password.
   it('changePassword succeeds on supported firmware and rejects older versions', async () => {

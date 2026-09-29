@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+- Reset unfinished sessions when connecting to firmware v9.28.0 or newer, allowing host
+  reconnects while the device remains powered on.
+
 ## 0.4.0
 - Implement `showMnemonic()`, `changePassword()`, and `bip85AppBip39()` with the Rust/WASM firmware requirements
 

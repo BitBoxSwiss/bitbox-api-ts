@@ -269,6 +269,8 @@ export function toPublicError(err: unknown): BitBoxError {
       return communicationError('u2f framing decoding error');
     case 'info':
       return communicationError('error querying device info');
+    case 'resetSession':
+      return communicationError('error resetting session');
     case 'noise-pairing-rejected':
       return makeError(CODE_PAIRING_REJECTED, 'pairing code rejected by user');
   }
