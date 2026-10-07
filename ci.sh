@@ -16,8 +16,9 @@ fi
 npm run proto:check
 npm run typecheck
 npm run lint
-npm test
 npm run build
+npm test
+npm pack --dry-run --cache "${NPM_CONFIG_CACHE:-${TMPDIR:-/tmp}/bitbox-api-ts-npm-cache}"
 npm run sandbox:typecheck
 npm run sandbox:build
 

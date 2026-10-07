@@ -17,10 +17,12 @@ export type TransportErrorCode =
   | 'read'
   | 'u2f-decode'
   | 'info'
+  | 'resetSession'
   | 'version'
   | 'bridge'
   | 'simulator'
-  | 'webhid';
+  | 'webhid'
+  | 'webhid-cancel';
 
 /**
  * Transport-layer errors. The shape `{ code, message }` is compatible with the
@@ -37,10 +39,7 @@ export class TransportError extends Error {
   }
 }
 
-/**
- * Write then read. Mirrors the Rust `ReadWrite::query` default.
- * @internal
- */
+/** @internal */
 export async function query(rw: ReadWrite, msg: Uint8Array): Promise<Uint8Array> {
   rw.write(msg);
   return rw.read();
@@ -48,8 +47,7 @@ export async function query(rw: ReadWrite, msg: Uint8Array): Promise<Uint8Array>
 
 /**
  * Wraps a close callback so it fires exactly once. Clearing the reference
- * after invocation matches the `onCloseCb = undefined` guard in
- * `bitbox-api-rs/pkg/webhid.js`.
+ * after invocation prevents retained callbacks after teardown.
  * @internal
  */
 export function makeCloseGuard(cb?: () => void): () => void {

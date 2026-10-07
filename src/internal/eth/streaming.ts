@@ -6,7 +6,8 @@ import {
   type ETHResponse,
 } from '../../proto/gen/eth_pb.js';
 import type { EncryptedChannel } from '../pairing.js';
-import { queryEth, unexpectedResponse } from './query.js';
+import { unexpectedResponse } from '../proto-query.js';
+import { queryEth } from './query.js';
 
 export async function handleEthDataStreaming(
   channel: EncryptedChannel,

@@ -2,6 +2,8 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  HEADER_INIT_LEN,
+  MAX_LEN,
   U2fHid,
   U2fWs,
   getEncodedLen,
@@ -132,6 +134,13 @@ describe('U2fWs', () => {
     const header = new Uint8Array([0xee, 0xee, 0xee, 0xee, 0x55, 0x00, 0x41]);
     expect(hex(out.subarray(0, 7))).toBe(hex(header));
     expect(hex(out.subarray(7))).toBe(hex(payload));
+  });
+
+  it('rejects payloads that do not fit the old bridge frame buffer', () => {
+    const codec = new U2fWs(TEST_CMD, TEST_CID);
+    const maxPayload = MAX_LEN - HEADER_INIT_LEN;
+    expect(codec.encode(new Uint8Array(maxPayload)).length).toBe(MAX_LEN);
+    expect(() => codec.encode(new Uint8Array(maxPayload + 1))).toThrow(/max payload/);
   });
 });
 

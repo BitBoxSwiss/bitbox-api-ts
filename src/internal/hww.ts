@@ -3,11 +3,14 @@
 import type { Product } from '../index.js';
 import { PACKET_SIZE, U2fHid, U2fWs } from './u2f-framing.js';
 import { ReadWrite, TransportError, query } from './read-write.js';
+import { sleep } from './utils.js';
 
 /** @internal */
 export const HWW_REQ_NEW = 0x00;
 /** @internal */
 export const HWW_REQ_RETRY = 0x01;
+/** @internal */
+export const HWW_REQ_RESET = 0x03;
 /** @internal */
 export const HWW_INFO = 0x69;
 
@@ -37,16 +40,17 @@ export interface Info {
 }
 
 /** @internal */
+export function isMultiEdition(info: Info): boolean {
+  return info.product === 'bitbox02-multi' || info.product === 'bitbox02-nova-multi';
+}
+
+/** @internal */
 export interface Sleeper {
   sleep(ms: number): Promise<void>;
 }
 
 /** @internal */
-export const DEFAULT_SLEEPER: Sleeper = {
-  sleep(ms) {
-    return new Promise((resolve) => { setTimeout(resolve, ms); });
-  },
-};
+export const DEFAULT_SLEEPER: Sleeper = { sleep };
 
 /**
  * Wraps a lower byte-pipe with U2F HID framing. Writes are encoded and
@@ -220,6 +224,24 @@ export async function getInfo(rw: ReadWrite): Promise<Info> {
   };
 }
 
+async function resetSession(comm: ReadWrite, version: string, sleeper: Sleeper): Promise<void> {
+  if (!atLeast(parseSemver(version), { major: 9, minor: 28, patch: 0 })) {
+    return;
+  }
+  // Send at the framing layer so an unfinished workflow cannot consume the request.
+  for (;;) {
+    const response = await query(comm, new Uint8Array([HWW_REQ_RESET]));
+    if (response.length === 1 && response[0] === HWW_RSP_ACK) {
+      return;
+    }
+    if (response.length === 1 && response[0] === HWW_RSP_BUSY) {
+      await sleeper.sleep(BUSY_SLEEP_MS);
+      continue;
+    }
+    throw new TransportError('resetSession', 'unexpected session reset response');
+  }
+}
+
 /**
  * Adds the HWW request/response framing opcode layer plus BUSY/NOTREADY
  * retry logic on top of the U2F-framed communication.
@@ -239,8 +261,9 @@ export class HwwCommunication {
   static async create(comm: ReadWrite, sleeper: Sleeper = DEFAULT_SLEEPER): Promise<HwwCommunication> {
     const info = await getInfo(comm);
     if (!atLeast(parseSemver(info.version), { major: 7, minor: 0, patch: 0 })) {
-      throw new TransportError('version', 'firmware >=7.0.0 required');
+      throw new TransportError('version', 'firmware version >=7.0.0 required');
     }
+    await resetSession(comm, info.version, sleeper);
     return new HwwCommunication(comm, info, sleeper);
   }
 

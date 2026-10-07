@@ -4,7 +4,27 @@ import {
   connectAuto,
   connectBridge,
   connectWebHID,
+  type ConnectSession,
 } from './internal/connect.js';
+import {
+  CODE_INVALID_STATE,
+  CODE_USER_ABORT,
+  CODE_BITBOX_USER_ABORT,
+  ensureTyped,
+  toPublicError,
+} from './internal/errors.js';
+import {
+  bip85AppBip39 as bip85AppBip39Impl,
+  changePassword as changePasswordImpl,
+  deviceInfo as deviceInfoImpl,
+  rootFingerprint as rootFingerprintImpl,
+  showMnemonic as showMnemonicImpl,
+} from './internal/device.js';
+import {
+  cardanoAddress as cardanoAddressImpl,
+  cardanoSignTransaction as cardanoSignTransactionImpl,
+  cardanoXpubs as cardanoXpubsImpl,
+} from './internal/cardano/methods.js';
 import {
   ethAddress as ethAddressImpl,
   ethSign1559Transaction as ethSign1559TransactionImpl,
@@ -13,7 +33,16 @@ import {
   ethSignTypedMessage as ethSignTypedMessageImpl,
   ethXpub as ethXpubImpl,
 } from './internal/eth/methods.js';
-import type { HwwCommunication, Info } from './internal/hww.js';
+import {
+  btcAddress as btcAddressImpl,
+  btcIsScriptConfigRegistered as btcIsScriptConfigRegisteredImpl,
+  btcRegisterScriptConfig as btcRegisterScriptConfigImpl,
+  btcSignMessage as btcSignMessageImpl,
+  btcSignPSBT as btcSignPSBTImpl,
+  btcXpub as btcXpubImpl,
+  btcXpubs as btcXpubsImpl,
+} from './internal/btc/methods.js';
+import { isMultiEdition, type HwwCommunication, type Info } from './internal/hww.js';
 import type { NoiseConfig } from './internal/noise-config.js';
 import {
   completePairing,
@@ -22,23 +51,10 @@ import {
   type PairingState,
 } from './internal/pairing.js';
 
-const ERROR_CODE_UNKNOWN_JS = 'unknown-js';
-const ERROR_CODE_UNSUPPORTED = 'unsupported';
-const ERROR_CODE_NOT_IMPLEMENTED = 'not-implemented';
-const ERROR_CODE_USER_ABORT = 'user-abort';
-const ERROR_CODE_BITBOX_USER_ABORT = 'bitbox-user-abort';
-
-function unsupportedError(method: string): Error {
+function invalidStateError(method: string): Error {
   return {
-    code: ERROR_CODE_UNSUPPORTED,
-    message: `${method} is not supported in bitbox-api-ts`,
-  };
-}
-
-function notImplementedError(method: string): Error {
-  return {
-    code: ERROR_CODE_NOT_IMPLEMENTED,
-    message: `${method} is not yet implemented in bitbox-api-ts`,
+    code: CODE_INVALID_STATE,
+    message: `${method}: object is not in a usable state (uninitialized, consumed, or closed)`,
   };
 }
 
@@ -108,13 +124,14 @@ export type BtcScriptConfigWithKeypath = {
 };
 
 export type BtcSignMessageSignature = {
-  sig: Uint8Array;
-  recid: bigint;
-  electrumSig65: Uint8Array;
+  sig: number[];
+  recid: number;
+  electrumSig65: number[];
 };
 
 export type BtcXpubs = string[];
 
+/** Legacy Ethereum transaction fields as unsigned big-endian bytes. */
 export type EthTransaction = {
   nonce: Uint8Array;
   gasPrice: Uint8Array;
@@ -124,8 +141,9 @@ export type EthTransaction = {
   data: Uint8Array;
 };
 
+/** EIP-1559 transaction fields as unsigned big-endian bytes. */
 export type Eth1559Transaction = {
-  chainId: number;
+  chainId: number | bigint;
   nonce: Uint8Array;
   maxPriorityFeePerGas: Uint8Array;
   maxFeePerGas: Uint8Array;
@@ -135,15 +153,16 @@ export type Eth1559Transaction = {
   data: Uint8Array;
 };
 
+/** Ethereum signature split into R, S, and V byte arrays. */
 export type EthSignature = {
-  r: Uint8Array;
-  s: Uint8Array;
-  v: Uint8Array;
+  r: number[];
+  s: number[];
+  v: number[];
 };
 
 export type EthAddressCase = 'upper' | 'lower' | 'mixed';
 
-export type CardanoXpub = Uint8Array;
+export type CardanoXpub = number[];
 export type CardanoXpubs = CardanoXpub[];
 export type CardanoNetwork = 'mainnet' | 'testnet';
 
@@ -208,14 +227,15 @@ export type CardanoTransaction = {
 };
 
 export type CardanoShelleyWitness = {
-  signature: Uint8Array;
-  publicKey: Uint8Array;
+  signature: number[];
+  publicKey: number[];
 };
 
 export type CardanoSignTransactionResult = {
   shelleyWitnesses: CardanoShelleyWitness[];
 };
 
+/** Typed error returned by public API helpers. */
 export type Error = {
   code: string;
   message: string;
@@ -223,65 +243,55 @@ export type Error = {
 };
 
 /**
- * Connect to a BitBox02 using WebHID. WebHID is mainly supported by Chrome.
+ * Connect to a BitBox02 using WebHID.
+ *
+ * WebHID is available in Chromium-based browsers in secure contexts. Call this
+ * from a user action so the browser can show the device chooser.
  */
-export async function bitbox02ConnectWebHID(on_close_cb: OnCloseCb): Promise<BitBox> {
+export async function bitbox02ConnectWebHID(onCloseCb?: OnCloseCb): Promise<BitBox> {
   try {
-    return await connectWebHID(on_close_cb);
+    return new BitBox(await connectWebHID(onCloseCb));
   } catch (err) {
-    throw ensureError(err);
+    throw toPublicError(err);
   }
 }
 
 /**
- * Connect to a BitBox02 by using the BitBoxBridge service.
+ * Connect to a BitBox02 through the local BitBoxBridge service.
  */
-export async function bitbox02ConnectBridge(on_close_cb: OnCloseCb): Promise<BitBox> {
+export async function bitbox02ConnectBridge(onCloseCb?: OnCloseCb): Promise<BitBox> {
   try {
-    return await connectBridge(on_close_cb);
+    return new BitBox(await connectBridge(onCloseCb));
   } catch (err) {
-    throw ensureError(err);
+    throw toPublicError(err);
   }
 }
 
 /**
- * Connect to a BitBox02 using WebHID if available. If WebHID is not available, we attempt to
- * connect using the BitBoxBridge.
+ * Connect to a BitBox02 using WebHID when available, otherwise BitBoxBridge.
  */
-export async function bitbox02ConnectAuto(on_close_cb: OnCloseCb): Promise<BitBox> {
+export async function bitbox02ConnectAuto(onCloseCb?: OnCloseCb): Promise<BitBox> {
   try {
-    return await connectAuto(on_close_cb);
+    return new BitBox(await connectAuto(onCloseCb));
   } catch (err) {
-    throw ensureError(err);
+    throw toPublicError(err);
   }
 }
 
 /**
- * Run any exception raised by this library through this function to get a typed error.
+ * Normalize any thrown value to the public typed error shape.
  *
  * If the input already looks like a typed `{ code: string, message: string }`, it is returned
  * as-is. Otherwise it is wrapped as `{ code: 'unknown-js', message: 'Unknown Javascript error',
  * err: <original> }`.
  */
 export function ensureError(err: any): Error {
-  if (
-    err !== null &&
-    typeof err === 'object' &&
-    typeof err.code === 'string' &&
-    typeof err.message === 'string'
-  ) {
-    return err as Error;
-  }
-  return {
-    code: ERROR_CODE_UNKNOWN_JS,
-    message: 'Unknown Javascript error',
-    err,
-  };
+  return ensureTyped(err);
 }
 
 /** Returns true if the user cancelled an operation. */
 export function isUserAbort(err: Error): boolean {
-  return err.code === ERROR_CODE_USER_ABORT || err.code === ERROR_CODE_BITBOX_USER_ABORT;
+  return err.code === CODE_USER_ABORT || err.code === CODE_BITBOX_USER_ABORT;
 }
 
 /**
@@ -309,56 +319,113 @@ export function ethIdentifyCase(recipientAddress: string): EthAddressCase {
   return 'upper';
 }
 
+type BitBoxOpen = {
+  kind: 'open';
+  hww: HwwCommunication;
+  close: () => void;
+  config: NoiseConfig;
+};
+type BitBoxStateUnion = { kind: 'uninitialized' } | BitBoxOpen | { kind: 'consumed' };
+
+type PairingOpen = {
+  kind: 'open';
+  state: PairingState;
+  close: () => void;
+};
+type PairingStateUnion = { kind: 'uninitialized' } | PairingOpen | { kind: 'consumed' };
+
+type PairedOpen = {
+  kind: 'open';
+  channel: EncryptedChannel;
+  info: Info;
+  close: () => void;
+};
+type PairedStateUnion = { kind: 'uninitialized' } | PairedOpen | { kind: 'closed' };
+
 /**
- * BitBox client. Instantiate it using `bitbox02ConnectAuto()`.
+ * Unpaired BitBox client.
+ *
+ * Create initialized instances with `bitbox02ConnectAuto()`, `bitbox02ConnectWebHID()`, or
+ * `bitbox02ConnectBridge()`. Direct constructors are retained for compatibility and create an
+ * inert object whose methods throw `code: 'invalid-state'`.
  */
 export class BitBox {
+  #state: BitBoxStateUnion = { kind: 'uninitialized' };
+
+  /** @internal */
+  constructor(session?: ConnectSession) {
+    if (session !== undefined) {
+      this.#state = {
+        kind: 'open',
+        hww: session.hww,
+        close: session.close,
+        config: session.config,
+      };
+    }
+  }
+
+  #consumeOpen(): BitBoxOpen | undefined {
+    const state = this.#state;
+    if (state.kind !== 'open') {
+      return undefined;
+    }
+    this.#state = { kind: 'consumed' };
+    return state;
+  }
+
   /** No-op; retained for ABI compatibility with the wasm-bindgen output. */
   free(): void {}
 
   /**
    * Invokes the device unlock and pairing. After this, stop using this instance and continue
    * with the returned instance of type `PairingBitBox`.
+   *
+   * This consumes the `BitBox` synchronously. A second call, including a concurrent call while
+   * the first is still running, rejects with `code: 'invalid-state'`. If pairing setup fails, the
+   * transport is closed and callers must reconnect before retrying.
    */
   async unlockAndPair(): Promise<PairingBitBox> {
-    const state = BITBOX_STATE.get(this);
-    if (state === undefined) {
-      throw notImplementedError('unlockAndPair');
+    const open = this.#consumeOpen();
+    if (open === undefined) {
+      throw invalidStateError('unlockAndPair');
     }
     try {
-      const pairing = await performHandshake(state.hww, state.config);
-      BITBOX_STATE.delete(this);
-      return makePairingBitBox(pairing, state.close);
+      const pairing = await performHandshake(open.hww, open.config);
+      return makePairingBitBox(pairing, open.close);
     } catch (err) {
-      throw ensureError(err);
+      bestEffortClose(open.close);
+      throw toPublicError(err);
     }
   }
 }
 
-type BitBoxState = {
-  hww: HwwCommunication;
-  close: () => void;
-  config: NoiseConfig;
-};
-
-const BITBOX_STATE = new WeakMap<BitBox, BitBoxState>();
-
-/** @internal */
-export function makeBitBox(
-  hww: HwwCommunication,
-  close: () => void,
-  config: NoiseConfig,
-): BitBox {
-  const bitbox = new BitBox();
-  BITBOX_STATE.set(bitbox, { hww, close, config });
-  return bitbox;
-}
-
 /**
  * BitBox in the pairing state. Use `getPairingCode()` to display the pairing code to the user and
- * `waitConfirm()` to proceed to the paired state.
+ * `waitConfirm()` to proceed to the paired state. Direct constructors create an inert object.
  */
 export class PairingBitBox {
+  #state: PairingStateUnion = { kind: 'uninitialized' };
+
+  /** @internal */
+  constructor(init?: Omit<PairingOpen, 'kind'>) {
+    if (init !== undefined) {
+      this.#state = { kind: 'open', ...init };
+    }
+  }
+
+  #readOpen(): PairingOpen | undefined {
+    return this.#state.kind === 'open' ? this.#state : undefined;
+  }
+
+  #consumeOpen(): PairingOpen | undefined {
+    const state = this.#state;
+    if (state.kind !== 'open') {
+      return undefined;
+    }
+    this.#state = { kind: 'consumed' };
+    return state;
+  }
+
   /** No-op; retained for ABI compatibility with the wasm-bindgen output. */
   free(): void {}
 
@@ -370,316 +437,425 @@ export class PairingBitBox {
    * If the BitBox was paired before and the pairing was persisted, the pairing step is
    * skipped. In this case, `undefined` is returned. Also in this case, call `waitConfirm()` to
    * establish the encrypted connection.
+   *
+   * Call this before `waitConfirm()`, because `waitConfirm()` consumes the pairing object.
    */
   getPairingCode(): string | undefined {
-    return PAIRING_STATE.get(this)?.state.pairingCode;
+    const open = this.#readOpen();
+    if (open === undefined) {
+      throw invalidStateError('getPairingCode');
+    }
+    return open.state.pairingCode;
   }
 
   /**
    * Proceed to the paired state. After this, stop using this instance and continue with the
    * returned instance of type `PairedBitBox`.
+   *
+   * This consumes the `PairingBitBox` synchronously. A second call, including a concurrent call
+   * while the first is still running, rejects with `code: 'invalid-state'`. If confirmation fails,
+   * the transport is closed and callers must reconnect before retrying.
    */
   async waitConfirm(): Promise<PairedBitBox> {
-    const state = PAIRING_STATE.get(this);
-    if (state === undefined) {
-      throw notImplementedError('waitConfirm');
+    const open = this.#consumeOpen();
+    if (open === undefined) {
+      throw invalidStateError('waitConfirm');
     }
     try {
-      const channel = await completePairing(state.state);
-      PAIRING_STATE.delete(this);
-      return makePairedBitBox(channel, state.state.hww.info, state.close);
+      const channel = await completePairing(open.state);
+      return makePairedBitBox(channel, open.state.hww.info, open.close);
     } catch (err) {
-      throw ensureError(err);
+      bestEffortClose(open.close);
+      throw toPublicError(err);
     }
   }
 }
 
-type PairingBitBoxState = {
-  state: PairingState;
-  close: () => void;
-};
-
-const PAIRING_STATE = new WeakMap<PairingBitBox, PairingBitBoxState>();
-
 function makePairingBitBox(state: PairingState, close: () => void): PairingBitBox {
-  const pairing = new PairingBitBox();
-  PAIRING_STATE.set(pairing, { state, close });
-  return pairing;
-}
-
-function requirePaired(paired: PairedBitBox, method: string): PairedBitBoxState {
-  const state = PAIRED_STATE.get(paired);
-  if (state === undefined) {
-    throw notImplementedError(method);
-  }
-  return state;
+  return new PairingBitBox({ state, close });
 }
 
 /**
  * Paired BitBox. This is where you can invoke most API functions like getting xpubs, displaying
- * receive addresses, etc.
+ * receive addresses, and signing transactions. Direct constructors create an inert object.
  */
 export class PairedBitBox {
+  #state: PairedStateUnion = { kind: 'uninitialized' };
+  #queue: Promise<void> = Promise.resolve();
+
+  /** @internal */
+  constructor(init?: Omit<PairedOpen, 'kind'>) {
+    if (init !== undefined) {
+      this.#state = { kind: 'open', ...init };
+    }
+  }
+
+  #requireOpen(method: string): PairedOpen {
+    if (this.#state.kind !== 'open') {
+      throw invalidStateError(method);
+    }
+    return this.#state;
+  }
+
+  #closeOpen(): PairedOpen | undefined {
+    const state = this.#state;
+    if (state.kind !== 'open') {
+      return undefined;
+    }
+    this.#state = { kind: 'closed' };
+    return state;
+  }
+
+  /**
+   * Serializes all device-touching public methods on this paired connection.
+   *
+   * The BitBox protocol and Noise channel are ordered streams, not multiplexed
+   * request/response transports. Some public methods also perform multi-step
+   * conversations (for example ETH streaming or anti-klepto signing), so the
+   * lock must cover the whole public method, not only one encrypted query.
+   *
+   * Calls made after close fail before joining the queue, so they do not wait
+   * behind a stuck transport read. The open state is checked again when the
+   * queued operation starts, so calls queued before close still fail if they
+   * did not already enter the device conversation.
+   *
+   * Each call chains onto the previous queue tail and then replaces the tail
+   * with a settled `void` promise, so a rejected call does not poison later
+   * queued operations.
+   */
+  #runExclusive<T>(
+    method: string,
+    fn: (open: PairedOpen) => Promise<T>,
+  ): Promise<T> {
+    this.#requireOpen(method);
+    const run = this.#queue.catch(() => undefined).then(async () => {
+      const open = this.#requireOpen(method);
+      try {
+        return await fn(open);
+      } catch (err) {
+        throw toPublicError(err);
+      }
+    });
+    this.#queue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
   /** No-op; retained for ABI compatibility with the wasm-bindgen output. */
   free(): void {}
 
   /**
    * Closes the BitBox connection. This also invokes the `on_close_cb` callback which was
-   * provided to the connect method creating the connection. Guarded against double-invocation.
+   * provided to the connect method creating the connection. Idempotent: calling close() on an
+   * already-closed or uninitialized instance is a no-op.
+   *
+   * After `close()`, all other methods throw `code: 'invalid-state'`.
    */
   close(): void {
-    const state = PAIRED_STATE.get(this);
-    if (state === undefined || state.closed) {
+    const open = this.#closeOpen();
+    if (open === undefined) {
       return;
     }
-    state.closed = true;
-    state.close();
+    open.close();
   }
 
-  deviceInfo(): Promise<DeviceInfo> {
-    return Promise.reject(notImplementedError('deviceInfo'));
+  /** Query device metadata. */
+  async deviceInfo(): Promise<DeviceInfo> {
+    return this.#runExclusive('deviceInfo', open => deviceInfoImpl(open.channel));
   }
 
   /** Returns which product we are connected to. */
   product(): Product {
-    const state = PAIRED_STATE.get(this);
-    if (state === undefined) {
-      throw notImplementedError('product');
-    }
-    return state.info.product;
+    return this.#requireOpen('product').info.product;
   }
 
   /** Returns the firmware version, e.g. "9.18.0". */
   version(): string {
-    const state = PAIRED_STATE.get(this);
-    if (state === undefined) {
-      throw notImplementedError('version');
-    }
-    return state.info.version;
+    return this.#requireOpen('version').info.version;
   }
 
   /** Returns the hex-encoded 4-byte root fingerprint. */
-  rootFingerprint(): Promise<string> {
-    return Promise.reject(notImplementedError('rootFingerprint'));
+  async rootFingerprint(): Promise<string> {
+    return this.#runExclusive('rootFingerprint', open => rootFingerprintImpl(open.channel));
   }
 
-  /** Show recovery words on the Bitbox. */
-  showMnemonic(): Promise<void> {
-    return Promise.reject(notImplementedError('showMnemonic'));
+  /** Show recovery words on the BitBox. */
+  async showMnemonic(): Promise<void> {
+    return this.#runExclusive('showMnemonic', open => showMnemonicImpl(open.channel));
   }
 
-  /** Invokes the password change workflow on the device. */
-  changePassword(): Promise<void> {
-    return Promise.reject(notImplementedError('changePassword'));
+  /** Invokes the password change workflow on the device. Requires firmware >=9.25.0. */
+  async changePassword(): Promise<void> {
+    return this.#runExclusive('changePassword', open => changePasswordImpl(open.channel, open.info));
   }
 
-  btcXpub(
-    _coin: BtcCoin,
-    _keypath: Keypath,
-    _xpub_type: XPubType,
-    _display: boolean,
+  /** Retrieves a Bitcoin-family account xpub. */
+  async btcXpub(
+    coin: BtcCoin,
+    keypath: Keypath,
+    xpub_type: XPubType,
+    display: boolean,
   ): Promise<string> {
-    return Promise.reject(unsupportedError('btcXpub'));
+    return this.#runExclusive('btcXpub', open =>
+      btcXpubImpl(open.channel, coin, keypath, xpub_type, display),
+    );
   }
 
-  btcXpubs(
-    _coin: BtcCoin,
-    _keypaths: Keypath[],
-    _xpub_type: BtcXPubsType,
+  /** Retrieves multiple Bitcoin-family xpubs at once. */
+  async btcXpubs(
+    coin: BtcCoin,
+    keypaths: Keypath[],
+    xpub_type: BtcXPubsType,
   ): Promise<BtcXpubs> {
-    return Promise.reject(unsupportedError('btcXpubs'));
+    return this.#runExclusive('btcXpubs', open =>
+      btcXpubsImpl(open.channel, open.info, coin, keypaths, xpub_type),
+    );
   }
 
-  btcIsScriptConfigRegistered(
-    _coin: BtcCoin,
-    _script_config: BtcScriptConfig,
-    _keypath_account?: Keypath,
+  /** Checks whether a multisig or policy script config is registered. */
+  async btcIsScriptConfigRegistered(
+    coin: BtcCoin,
+    script_config: BtcScriptConfig,
+    keypath_account?: Keypath,
   ): Promise<boolean> {
-    return Promise.reject(unsupportedError('btcIsScriptConfigRegistered'));
+    return this.#runExclusive('btcIsScriptConfigRegistered', open =>
+      btcIsScriptConfigRegisteredImpl(
+        open.channel,
+        coin,
+        script_config,
+        keypath_account,
+      ),
+    );
   }
 
-  btcRegisterScriptConfig(
-    _coin: BtcCoin,
-    _script_config: BtcScriptConfig,
-    _keypath_account: Keypath | undefined,
-    _xpub_type: BtcRegisterXPubType,
-    _name?: string,
+  /** Registers a multisig or policy script config on the device. */
+  async btcRegisterScriptConfig(
+    coin: BtcCoin,
+    script_config: BtcScriptConfig,
+    keypath_account: Keypath | undefined,
+    xpub_type: BtcRegisterXPubType,
+    name?: string,
   ): Promise<void> {
-    return Promise.reject(unsupportedError('btcRegisterScriptConfig'));
+    return this.#runExclusive('btcRegisterScriptConfig', open =>
+      btcRegisterScriptConfigImpl(
+        open.channel,
+        coin,
+        script_config,
+        keypath_account,
+        xpub_type,
+        name,
+      ),
+    );
   }
 
-  btcAddress(
-    _coin: BtcCoin,
-    _keypath: Keypath,
-    _script_config: BtcScriptConfig,
-    _display: boolean,
+  /** Retrieves a Bitcoin-family address at the provided keypath. */
+  async btcAddress(
+    coin: BtcCoin,
+    keypath: Keypath,
+    script_config: BtcScriptConfig,
+    display: boolean,
   ): Promise<string> {
-    return Promise.reject(unsupportedError('btcAddress'));
+    return this.#runExclusive('btcAddress', open =>
+      btcAddressImpl(open.channel, coin, keypath, script_config, display),
+    );
   }
 
-  btcSignPSBT(
-    _coin: BtcCoin,
-    _psbt: string,
-    _force_script_config: BtcScriptConfigWithKeypath | undefined,
-    _format_unit: BtcFormatUnit,
+  /** Signs a base64-encoded PSBT and returns the updated PSBT. */
+  async btcSignPSBT(
+    coin: BtcCoin,
+    psbt: string,
+    force_script_config: BtcScriptConfigWithKeypath | undefined,
+    format_unit: BtcFormatUnit,
   ): Promise<string> {
-    return Promise.reject(unsupportedError('btcSignPSBT'));
+    return this.#runExclusive('btcSignPSBT', open =>
+      btcSignPSBTImpl(
+        open.channel,
+        open.info,
+        coin,
+        psbt,
+        force_script_config,
+        format_unit,
+      ),
+    );
   }
 
-  btcSignMessage(
-    _coin: BtcCoin,
-    _script_config: BtcScriptConfigWithKeypath,
-    _msg: Uint8Array,
+  /** Signs a message using the provided Bitcoin script config. */
+  async btcSignMessage(
+    coin: BtcCoin,
+    script_config: BtcScriptConfigWithKeypath,
+    msg: Uint8Array,
   ): Promise<BtcSignMessageSignature> {
-    return Promise.reject(unsupportedError('btcSignMessage'));
+    return this.#runExclusive('btcSignMessage', open =>
+      btcSignMessageImpl(open.channel, open.info, coin, script_config, msg),
+    );
   }
 
-  /** Does this device support ETH functionality? Currently this means BitBox02 Multi. */
+  /** Does this device support ETH functionality? Currently this means BitBox02 Multi or Nova Multi. */
   ethSupported(): boolean {
-    const product = PAIRED_STATE.get(this)?.info.product;
-    return product === 'bitbox02-multi' || product === 'bitbox02-nova-multi';
+    return isMultiEdition(this.#requireOpen('ethSupported').info);
   }
 
+  /** Query the device for an Ethereum account xpub. */
   async ethXpub(keypath: Keypath): Promise<string> {
-    const state = requirePaired(this, 'ethXpub');
-    try {
-      return await ethXpubImpl(state.channel, keypath);
-    } catch (err) {
-      throw ensureError(err);
-    }
+    return this.#runExclusive('ethXpub', open => ethXpubImpl(open.channel, keypath));
   }
 
+  /**
+   * Query the device for an Ethereum address.
+   *
+   * Set `display` to `true` to require on-device confirmation.
+   */
   async ethAddress(chain_id: bigint, keypath: Keypath, display: boolean): Promise<string> {
-    const state = requirePaired(this, 'ethAddress');
-    try {
-      return await ethAddressImpl(state.channel, chain_id, keypath, display);
-    } catch (err) {
-      throw ensureError(err);
-    }
+    return this.#runExclusive('ethAddress', open =>
+      ethAddressImpl(open.channel, chain_id, keypath, display),
+    );
   }
 
+  /**
+   * Sign a legacy Ethereum transaction.
+   *
+   * Transaction fields are unsigned big-endian byte arrays. The returned `v` includes the EIP-155
+   * chain ID offset.
+   */
   async ethSignTransaction(
     chain_id: bigint,
     keypath: Keypath,
     tx: EthTransaction,
     address_case?: EthAddressCase,
   ): Promise<EthSignature> {
-    const state = requirePaired(this, 'ethSignTransaction');
-    try {
-      return await ethSignTransactionImpl(
-        state.channel,
-        state.info,
+    return this.#runExclusive('ethSignTransaction', open =>
+      ethSignTransactionImpl(
+        open.channel,
+        open.info,
         chain_id,
         keypath,
         tx,
         address_case,
-      );
-    } catch (err) {
-      throw ensureError(err);
-    }
+      ),
+    );
   }
 
+  /**
+   * Sign an EIP-1559 type 2 Ethereum transaction.
+   *
+   * Transaction fields are unsigned big-endian byte arrays. The returned `v` is the recovery ID.
+   */
   async ethSign1559Transaction(
     keypath: Keypath,
     tx: Eth1559Transaction,
     address_case?: EthAddressCase,
   ): Promise<EthSignature> {
-    const state = requirePaired(this, 'ethSign1559Transaction');
-    try {
-      return await ethSign1559TransactionImpl(
-        state.channel,
-        state.info,
+    return this.#runExclusive('ethSign1559Transaction', open =>
+      ethSign1559TransactionImpl(
+        open.channel,
+        open.info,
         keypath,
         tx,
         address_case,
-      );
-    } catch (err) {
-      throw ensureError(err);
-    }
+      ),
+    );
   }
 
+  /**
+   * Sign an Ethereum personal message.
+   *
+   * The device applies the standard Ethereum message prefix before signing. The returned `v`
+   * includes the +27 offset.
+   */
   async ethSignMessage(
     chain_id: bigint,
     keypath: Keypath,
     msg: Uint8Array,
   ): Promise<EthSignature> {
-    const state = requirePaired(this, 'ethSignMessage');
-    try {
-      return await ethSignMessageImpl(state.channel, state.info, chain_id, keypath, msg);
-    } catch (err) {
-      throw ensureError(err);
-    }
+    return this.#runExclusive('ethSignMessage', open =>
+      ethSignMessageImpl(open.channel, open.info, chain_id, keypath, msg),
+    );
   }
 
+  /**
+   * Sign an EIP-712 typed message.
+   *
+   * `use_antiklepto` defaults to `true` when omitted.
+   */
   async ethSignTypedMessage(
     chain_id: bigint,
     keypath: Keypath,
     msg: any,
     use_antiklepto?: boolean,
   ): Promise<EthSignature> {
-    const state = requirePaired(this, 'ethSignTypedMessage');
-    try {
-      return await ethSignTypedMessageImpl(
-        state.channel,
-        state.info,
+    return this.#runExclusive('ethSignTypedMessage', open =>
+      ethSignTypedMessageImpl(
+        open.channel,
+        open.info,
         chain_id,
         keypath,
         msg,
         use_antiklepto,
-      );
-    } catch (err) {
-      throw ensureError(err);
-    }
+      ),
+    );
   }
 
-  /** Does this device support Cardano functionality? Currently this means BitBox02 Multi. */
+  /** Does this device support Cardano functionality? Currently this means BitBox02 Multi or Nova Multi. */
   cardanoSupported(): boolean {
-    return false;
+    return isMultiEdition(this.#requireOpen('cardanoSupported').info);
   }
 
-  cardanoXpubs(_keypaths: Keypath[]): Promise<CardanoXpubs> {
-    return Promise.reject(unsupportedError('cardanoXpubs'));
+  /**
+   * Query the device for xpubs. The result contains one xpub per requested keypath. Each xpub is
+   * 64 bytes: 32 byte chain code + 32 byte pubkey.
+   */
+  async cardanoXpubs(keypaths: Keypath[]): Promise<CardanoXpubs> {
+    return this.#runExclusive('cardanoXpubs', open =>
+      cardanoXpubsImpl(open.channel, open.info, keypaths),
+    );
   }
 
-  cardanoAddress(
-    _network: CardanoNetwork,
-    _script_config: CardanoScriptConfig,
-    _display: boolean,
+  /** Query the device for a Cardano address. */
+  async cardanoAddress(
+    network: CardanoNetwork,
+    script_config: CardanoScriptConfig,
+    display: boolean,
   ): Promise<string> {
-    return Promise.reject(unsupportedError('cardanoAddress'));
+    return this.#runExclusive('cardanoAddress', open =>
+      cardanoAddressImpl(open.channel, open.info, network, script_config, display),
+    );
   }
 
-  cardanoSignTransaction(
-    _transaction: CardanoTransaction,
+  /** Sign a Cardano transaction. */
+  async cardanoSignTransaction(
+    transaction: CardanoTransaction,
   ): Promise<CardanoSignTransactionResult> {
-    return Promise.reject(unsupportedError('cardanoSignTransaction'));
+    return this.#runExclusive('cardanoSignTransaction', open =>
+      cardanoSignTransactionImpl(open.channel, open.info, transaction),
+    );
   }
 
   /**
    * Invokes the BIP85-BIP39 workflow on the device, letting the user select the number of words
-   * (12, 28, 24) and an index and display a derived BIP-39 mnemonic.
+   * (12 or 24) and an index and display a derived BIP-39 mnemonic.
+   *
+   * Requires firmware >=9.17.0.
    */
-  bip85AppBip39(): Promise<void> {
-    return Promise.reject(unsupportedError('bip85AppBip39'));
+  async bip85AppBip39(): Promise<void> {
+    return this.#runExclusive('bip85AppBip39', open => bip85AppBip39Impl(open.channel, open.info));
   }
 }
 
-type PairedBitBoxState = {
-  channel: EncryptedChannel;
-  info: Info;
-  close: () => void;
-  closed: boolean;
-};
-
-const PAIRED_STATE = new WeakMap<PairedBitBox, PairedBitBoxState>();
-
-/** @internal */
-export function makePairedBitBox(
+function makePairedBitBox(
   channel: EncryptedChannel,
   info: Info,
   close: () => void,
 ): PairedBitBox {
-  const paired = new PairedBitBox();
-  PAIRED_STATE.set(paired, { channel, info, close, closed: false });
-  return paired;
+  return new PairedBitBox({ channel, info, close });
+}
+
+function bestEffortClose(close: () => void): void {
+  try {
+    close();
+  } catch {
+    // Swallow teardown errors so the original handshake/pairing failure
+    // remains the rejection reason.
+  }
 }

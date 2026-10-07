@@ -12,6 +12,7 @@ export const PACKET_SIZE = 64;
 export const MAX_LEN = 129 * PACKET_SIZE;
 
 const MAX_PAYLOAD = PACKET_SIZE - HEADER_INIT_LEN + 128 * (PACKET_SIZE - HEADER_CONT_LEN);
+const MAX_WS_PAYLOAD = MAX_LEN - HEADER_INIT_LEN;
 
 /**
  * Total buffer length an encoded message occupies, counting the padding that
@@ -155,6 +156,9 @@ export class U2fWs implements U2fFraming {
   }
 
   encode(message: Uint8Array): Uint8Array {
+    if (message.length > MAX_WS_PAYLOAD) {
+      throw new TransportError('u2f-decode', 'message exceeds U2F WS max payload');
+    }
     const buf = new Uint8Array(HEADER_INIT_LEN + message.length);
     const v = viewOf(buf);
     v.setUint32(0, this.cid, false);

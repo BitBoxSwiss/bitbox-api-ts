@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useState } from 'react';
-import * as bitbox from 'bitbox-api-ts';
+import * as bitbox from '@bitboxswiss/bitbox-api';
 import './App.css';
 
+import { Cardano } from './Cardano';
+import { Bitcoin } from './Bitcoin';
 import { Ethereum } from './Ethereum';
 import { General } from './General';
 import { ErrorNotification } from './ErrorNotification';
@@ -63,7 +65,7 @@ function App() {
     return (
       <div className="container">
         <h2>Pairing code</h2>
-        <p>Confirm the matching code on the BitBox02.</p>
+        <p>Confirm the matching code on the BitBox.</p>
         <pre>{pairingCode}</pre>
         {err !== undefined && (
           <ErrorNotification
@@ -79,18 +81,26 @@ function App() {
   if (bb02 !== undefined) {
     return (
       <div className="contentContainer">
-        <h2 style={{ textAlign: 'left' }}>BitBox02 sandbox</h2>
+        <h2 style={{ textAlign: 'left' }}>BitBox sandbox</h2>
         <div style={{ textAlign: 'left' }}>
           <p>Connection established.</p>
           &nbsp;
           <button onClick={() => bb02.close()}>Close connection</button>
         </div>
         <Accordion opened title="General">
-          <General />
+          <General bb02={bb02} />
+        </Accordion>
+        <Accordion title="Bitcoin">
+          <Bitcoin bb02={bb02} />
         </Accordion>
         {bb02.ethSupported() && (
           <Accordion title="Ethereum">
             <Ethereum bb02={bb02} />
+          </Accordion>
+        )}
+        {bb02.cardanoSupported() && (
+          <Accordion title="Cardano">
+            <Cardano bb02={bb02} />
           </Accordion>
         )}
       </div>
@@ -124,7 +134,7 @@ function App() {
       )}
       <p className="portNote">
         This sandbox is backed by the in-tree{' '}
-        <a href="https://github.com/BitBoxSwiss/bitbox-api-ts">bitbox-api-ts</a>{' '}
+        <a href="https://github.com/BitBoxSwiss/bitbox-api-ts">@bitboxswiss/bitbox-api</a>{' '}
         package. It validates the current browser integration and currently
         wired flows; it is not intended to track full API parity.
       </p>

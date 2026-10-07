@@ -1,81 +1,190 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import path from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { connectSimulator, probeSimulatorInfo } from '../src/internal/connect.js';
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { create } from '@bufbuild/protobuf';
+import { BitBox, PairedBitBox } from '../src/index.js';
+import { connectSimulator, probeSimulatorInfo } from '../src/internal/connect-simulator.js';
 import { atLeast, parseSemver } from '../src/internal/hww.js';
 import { NoiseConfigNoCache } from '../src/internal/noise-config.js';
+import { completePairing, performHandshake } from '../src/internal/pairing.js';
+import { restoreFromMnemonic } from '../src/internal/restore.js';
+import { query } from '../src/internal/proto-query.js';
+import { RequestSchema } from '../src/proto/gen/hww_pb.js';
+import { BTCCoin, BTCScriptConfig_SimpleType, BTCSignNextResponse_Type } from '../src/proto/gen/btc_pb.js';
 import {
   SimulatorServer,
-  downloadSimulators,
-  parseVersionFromFilename,
+  ensureSimulator,
+  simulatorCases,
   simulatorSupported,
 } from './simulator-util.js';
 
 const ENABLED = simulatorSupported() && process.env.SKIP_SIMULATOR !== '1';
 
-async function binaryToRun(): Promise<string> {
-  const override = process.env.SIMULATOR;
-  if (override !== undefined && override.length > 0) {
-    return path.resolve(override);
-  }
-  const paths = await downloadSimulators();
-  const last = paths[paths.length - 1];
-  if (last === undefined) {
-    throw new Error('no simulators listed in test/simulators.json');
-  }
-  return last;
-}
-
-describe.skipIf(!ENABLED)('simulator info probe', () => {
+describe.skipIf(!ENABLED).sequential.each(simulatorCases())('simulator info probe $name', (simulator) => {
   let server: SimulatorServer | undefined;
-  let version = '';
+  let binary = '';
+  const version = parseSemver(simulator.version);
 
   beforeAll(async () => {
-    const binary = await binaryToRun();
-    version = parseVersionFromFilename(path.basename(binary));
-    server = new SimulatorServer(binary);
-  }, 30_000);
+    binary = await ensureSimulator(simulator);
+  }, 120_000);
 
-  afterAll(async () => {
-    server?.kill();
-    await server?.exited;
+  beforeEach(() => {
+    server = new SimulatorServer(binary);
   });
 
+  afterEach(async () => {
+    await server?.stop();
+    server = undefined;
+  }, 30_000);
+
   function expectedProduct(): 'bitbox02-multi' | 'bitbox02-nova-multi' {
-    return atLeast(parseSemver(version), { major: 9, minor: 24, patch: 0 })
+    return atLeast(version, { major: 9, minor: 24, patch: 0 })
       ? 'bitbox02-nova-multi'
       : 'bitbox02-multi';
+  }
+
+  function expectedDeviceName(): 'BitBox HCXT' | 'My BitBox' {
+    return atLeast(version, { major: 9, minor: 24, patch: 0 })
+      ? 'BitBox HCXT'
+      : 'My BitBox';
   }
 
   it('HWW info reports the expected version, product, and state', async () => {
     let onCloseCalls = 0;
     const probe = await probeSimulatorInfo(undefined, () => { onCloseCalls += 1; });
-    expect(probe.info.version).toBe(version);
-    expect(probe.info.product).toBe(expectedProduct());
-    expect(probe.info.unlocked).toBe(false);
-    if (atLeast(parseSemver(version), { major: 9, minor: 20, patch: 0 })) {
-      expect(probe.info.initialized).toBe(false);
-    } else {
-      expect(probe.info.initialized).toBeUndefined();
+    try {
+      expect(probe.info.version).toBe(simulator.version);
+      expect(probe.info.product).toBe(expectedProduct());
+      expect(probe.info.unlocked).toBe(false);
+      if (atLeast(version, { major: 9, minor: 20, patch: 0 })) {
+        expect(probe.info.initialized).toBe(false);
+      } else {
+        expect(probe.info.initialized).toBeUndefined();
+      }
+    } finally {
+      probe.close();
     }
-    probe.close();
     expect(onCloseCalls).toBe(1);
   }, 15_000);
 
   it('pairs over Noise and exposes paired device metadata', async () => {
     let onCloseCalls = 0;
-    const bitbox = await connectSimulator(undefined, () => { onCloseCalls += 1; }, new NoiseConfigNoCache());
-    const pairing = await bitbox.unlockAndPair();
-    expect(pairing.getPairingCode()).toMatch(/^[A-Z2-7]{5} [A-Z2-7]{5}\n[A-Z2-7]{5} [A-Z2-7]{5}$/);
+    const session = await connectSimulator(undefined, () => { onCloseCalls += 1; }, new NoiseConfigNoCache());
+    try {
+      const bitbox = new BitBox(session);
+      const pairing = await bitbox.unlockAndPair();
+      expect(pairing.getPairingCode()).toMatch(/^[A-Z2-7]{5} [A-Z2-7]{5}\n[A-Z2-7]{5} [A-Z2-7]{5}$/);
 
-    const paired = await pairing.waitConfirm();
+      const paired = await pairing.waitConfirm();
+      try {
+        expect(paired.version()).toBe(simulator.version);
+        expect(paired.product()).toBe(expectedProduct());
+        expect(paired.ethSupported()).toBe(true);
+        const deviceInfo = await paired.deviceInfo();
+        expect(deviceInfo.name).toBe(expectedDeviceName());
+      } finally {
+        paired.close();
+      }
+    } catch (err) {
+      session.close();
+      throw err;
+    }
 
-    expect(paired.version()).toBe(version);
-    expect(paired.product()).toBe(expectedProduct());
-    expect(paired.ethSupported()).toBe(true);
-
-    paired.close();
     expect(onCloseCalls).toBe(1);
   }, 15_000);
+
+  it('rootFingerprint returns simulator fingerprint after restore', async () => {
+    let onCloseCalls = 0;
+    const session = await connectSimulator(undefined, () => { onCloseCalls += 1; }, new NoiseConfigNoCache());
+    try {
+      const pairing = await performHandshake(session.hww, session.config);
+      const channel = await completePairing(pairing);
+      await restoreFromMnemonic(channel);
+      const paired = new PairedBitBox({ channel, info: session.hww.info, close: session.close });
+      try {
+        await expect(paired.rootFingerprint()).resolves.toBe('4c00739d');
+      } finally {
+        paired.close();
+      }
+    } catch (err) {
+      session.close();
+      throw err;
+    }
+
+    expect(onCloseCalls).toBe(1);
+  }, 30_000);
+
+  // Resetting an unfinished workflow requires firmware v9.28.0 or newer.
+  it.skipIf(!atLeast(version, { major: 9, minor: 28, patch: 0 }))(
+    'reconnects after disconnecting with an unfinished signing request', async () => {
+      const session = await connectSimulator();
+      try {
+        const pairing = await performHandshake(session.hww, session.config);
+        const channel = await completePairing(pairing);
+        await restoreFromMnemonic(channel);
+        // Leave the signing workflow waiting for its next request when the host disconnects.
+        const response = await query(channel, create(RequestSchema, {
+          request: {
+            case: 'btcSignInit',
+            value: {
+              coin: BTCCoin.BTC,
+              scriptConfigs: [{
+                scriptConfig: { config: { case: 'simpleType', value: BTCScriptConfig_SimpleType.P2WPKH } },
+                keypath: [84 + 0x80000000, 0x80000000, 0x80000000],
+              }],
+              version: 2,
+              numInputs: 1,
+              numOutputs: 1,
+            },
+          },
+        }));
+        expect(response.response.case).toBe('btcSignNext');
+        if (response.response.case !== 'btcSignNext') {
+          throw new Error('expected the firmware to request the first transaction input');
+        }
+        expect(response.response.value.type).toBe(BTCSignNextResponse_Type.INPUT);
+      } finally {
+        session.close();
+      }
+
+      // Reconnect to the same running simulator, preserving the firmware session state.
+      const reconnected = await connectSimulator();
+      try {
+        // Check the first setup response: unlockAndPair currently ignores unlock errors.
+        await expect(reconnected.hww.query(new Uint8Array([0x75])))
+          .resolves.toEqual(new Uint8Array([0x00]));
+        const pairing = await new BitBox(reconnected).unlockAndPair();
+        const paired = await pairing.waitConfirm();
+        await expect(paired.rootFingerprint()).resolves.toBe('4c00739d');
+      } finally {
+        reconnected.close();
+      }
+    }, 30_000);
+
+  // Ported from bitbox-api-rs/tests/test_device.rs::test_change_password.
+  it('changePassword succeeds on supported firmware and rejects older versions', async () => {
+    const session = await connectSimulator(undefined, undefined, new NoiseConfigNoCache());
+    try {
+      const pairing = await performHandshake(session.hww, session.config);
+      const channel = await completePairing(pairing);
+      await restoreFromMnemonic(channel);
+      const paired = new PairedBitBox({ channel, info: session.hww.info, close: session.close });
+      try {
+        if (atLeast(version, { major: 9, minor: 25, patch: 0 })) {
+          await expect(paired.changePassword()).resolves.toBeUndefined();
+        } else {
+          await expect(paired.changePassword()).rejects.toMatchObject({
+            code: 'version',
+            message: 'firmware version >=9.25.0 required',
+          });
+        }
+      } finally {
+        paired.close();
+      }
+    } catch (err) {
+      session.close();
+      throw err;
+    }
+  }, 30_000);
 });

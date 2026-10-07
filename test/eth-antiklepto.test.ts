@@ -2,41 +2,17 @@
 
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { sha256 } from '@noble/hashes/sha256';
-import { describe, expect, it } from 'vitest';
+import { hexToBytes, utf8ToBytes as utf8 } from '@noble/hashes/utils';
+import { describe, expect, it, vi } from 'vitest';
 import {
   genHostNonce,
   hostCommit,
   taggedSha256,
   verifyEcdsa,
-} from '../src/internal/eth/antiklepto.js';
-
-const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s);
-
-function bytesToBigIntBE(bytes: Uint8Array): bigint {
-  let n = 0n;
-  for (const b of bytes) {
-    n = (n << 8n) | BigInt(b);
-  }
-  return n;
-}
-
-function bigIntToBytes32BE(n: bigint): Uint8Array {
-  const out = new Uint8Array(32);
-  let v = n;
-  for (let i = 31; i >= 0; i -= 1) {
-    out[i] = Number(v & 0xffn);
-    v >>= 8n;
-  }
-  return out;
-}
-
-function hexToBytes(hex: string): Uint8Array {
-  const out = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < out.length; i += 1) {
-    out[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  }
-  return out;
-}
+  verifyEcdsaCompact,
+} from '../src/internal/antiklepto.js';
+import { bytesToBigIntBE } from '../src/internal/utils.js';
+import { bigIntToBytes32BE } from './utils.js';
 
 describe('taggedSha256', () => {
   it('matches sha256(sha256(tag) || sha256(tag) || msg)', () => {
@@ -68,6 +44,26 @@ describe('genHostNonce', () => {
     expect(b.length).toBe(32);
     expect(a).not.toEqual(b);
   });
+
+  it('maps RNG failures to antiklepto errors', () => {
+    const originalCrypto = globalThis.crypto;
+    vi.stubGlobal('crypto', {
+      getRandomValues(): never {
+        throw new Error('rng unavailable');
+      },
+    });
+
+    try {
+      expect(() => genHostNonce()).toThrow(
+        expect.objectContaining({
+          code: 'antiklepto',
+          message: 'Antiklepto verification failed: Failed generating antiklepto host nonce',
+        }),
+      );
+    } finally {
+      vi.stubGlobal('crypto', originalCrypto);
+    }
+  });
 });
 
 function makeAntikleptoFixture(): {
@@ -94,7 +90,7 @@ function makeAntikleptoFixture(): {
   const r = finalUncompressed.slice(1, 33);
   const sig = new Uint8Array(65);
   sig.set(r, 0);
-  // s and recid don't matter for antiklepto verification.
+  // Use a valid low-S scalar and Ethereum recovery ID.
   sig.set(bigIntToBytes32BE(0x01n), 32);
   sig[64] = 0;
   return { hostNonce, signerCommitment, signature: sig };
@@ -140,7 +136,11 @@ describe('verifyEcdsa', () => {
     const corrupted = new Uint8Array(signature);
     corrupted[5] = (corrupted[5]! ^ 0x01) & 0xff;
     expect(() => verifyEcdsa(hostNonce, signerCommitment, corrupted)).toThrow(
-      expect.objectContaining({ code: 'antiklepto' }),
+      expect.objectContaining({
+        code: 'antiklepto',
+        message:
+          'Antiklepto verification failed: Could not verify that the host nonce was contributed to the signature. If this happens repeatedly, the device might be attempting to leak the seed through the signature.',
+      }),
     );
   });
 
@@ -162,10 +162,46 @@ describe('verifyEcdsa', () => {
     );
   });
 
-  it('rejects a wrong-length signature', () => {
-    const { hostNonce, signerCommitment } = makeAntikleptoFixture();
-    expect(() => verifyEcdsa(hostNonce, signerCommitment, new Uint8Array(64))).toThrow(
-      expect.objectContaining({ code: 'antiklepto' }),
-    );
+  it('accepts low-S and rejects its high-S counterpart', () => {
+    const { hostNonce, signerCommitment, signature } = makeAntikleptoFixture();
+    const highS = new Uint8Array(signature);
+    highS.set(bigIntToBytes32BE(secp256k1.CURVE.n - 1n), 32);
+
+    expect(() => verifyEcdsa(hostNonce, signerCommitment, signature)).not.toThrow();
+    expect(() => verifyEcdsa(hostNonce, signerCommitment, highS))
+      .toThrow(expect.objectContaining({
+        code: 'antiklepto',
+        message: 'Antiklepto verification failed: signature S must be low',
+      }));
+  });
+
+  it('validates compact signatures', () => {
+    const { hostNonce, signerCommitment, signature } = makeAntikleptoFixture();
+    const compact = signature.subarray(0, 64);
+    expect(() => verifyEcdsaCompact(hostNonce, signerCommitment, compact)).not.toThrow();
+
+    const highS = new Uint8Array(compact);
+    highS.set(bigIntToBytes32BE(secp256k1.CURVE.n - 1n), 32);
+    expect(() => verifyEcdsaCompact(hostNonce, signerCommitment, highS))
+      .toThrow(expect.objectContaining({
+        code: 'antiklepto',
+        message: 'Antiklepto verification failed: signature S must be low',
+      }));
+  });
+
+  it.each([2, 3])('accepts Ethereum recovery ID %i', (recoveryId) => {
+    const { hostNonce, signerCommitment, signature } = makeAntikleptoFixture();
+    signature[64] = recoveryId;
+    expect(() => verifyEcdsa(hostNonce, signerCommitment, signature)).not.toThrow();
+  });
+
+  it('rejects an out-of-range recovery ID', () => {
+    const { hostNonce, signerCommitment, signature } = makeAntikleptoFixture();
+    signature[64] = 4;
+    expect(() => verifyEcdsa(hostNonce, signerCommitment, signature))
+      .toThrow(expect.objectContaining({
+        code: 'antiklepto',
+        message: 'Antiklepto verification failed: signature recovery ID must be between 0 and 3',
+      }));
   });
 });

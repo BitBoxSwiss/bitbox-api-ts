@@ -2,7 +2,9 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  HWW_INFO,
   HWW_REQ_NEW,
+  HWW_REQ_RESET,
   HWW_REQ_RETRY,
   HWW_RSP_ACK,
   HWW_RSP_BUSY,
@@ -14,10 +16,7 @@ import {
   parseSemver,
 } from '../src/internal/hww.js';
 import { ReadWrite } from '../src/internal/read-write.js';
-
-function bytes(...values: number[]): Uint8Array {
-  return new Uint8Array(values);
-}
+import { bytes } from './utils.js';
 
 /** Fake ReadWrite that scripts a deterministic response sequence. */
 class ScriptedTransport implements ReadWrite {
@@ -125,6 +124,11 @@ describe('getInfo', () => {
 });
 
 describe('HwwCommunication.create', () => {
+  function infoResponse(version = '9.28.0'): Uint8Array {
+    const encoded = new TextEncoder().encode(`v${version}`);
+    return bytes(encoded.length, ...encoded, 0x00, 0x00, 0x01, 0x01);
+  }
+
   it('rejects devices running firmware <7.0.0', async () => {
     // length=5 "v6.9.9", platform=0, edition=0, unlocked=1
     const script = [bytes(0x06, 0x76, 0x36, 0x2e, 0x39, 0x2e, 0x39, 0x00, 0x00, 0x01)];
@@ -138,6 +142,65 @@ describe('HwwCommunication.create', () => {
     const hww = await HwwCommunication.create(t);
     expect(hww.info.version).toBe('9.18.0');
     expect(hww.info.product).toBe('bitbox02-multi');
+  });
+
+  it.each(['7.0.0', '9.27.2'])('skips session reset on firmware %s', async (version) => {
+    const t = new ScriptedTransport([infoResponse(version)]);
+    await HwwCommunication.create(t);
+    expect(t.writes).toEqual([bytes(HWW_INFO)]);
+  });
+
+  it.each(['9.28.0', '9.29.0', '10.0.0'])(
+    'resets firmware %s after INFO and before unlock', async (version) => {
+      const t = new ScriptedTransport([
+        infoResponse(version),
+        bytes(HWW_RSP_ACK),
+        bytes(HWW_RSP_ACK, 0x00),
+      ]);
+      const hww = await HwwCommunication.create(t);
+      await expect(hww.query(bytes(0x75))).resolves.toEqual(bytes(0x00));
+      expect(t.writes).toEqual([
+        bytes(HWW_INFO),
+        bytes(HWW_REQ_RESET),
+        bytes(HWW_REQ_NEW, 0x75),
+      ]);
+    },
+  );
+
+  it('retries session reset every second while firmware is BUSY', async () => {
+    const t = new ScriptedTransport([
+      infoResponse(),
+      bytes(HWW_RSP_BUSY),
+      bytes(HWW_RSP_BUSY),
+      bytes(HWW_RSP_ACK),
+    ]);
+    const sleeper = fakeSleeper();
+    await HwwCommunication.create(t, sleeper);
+    expect(sleeper.calls).toEqual([1000, 1000]);
+    expect(t.writes).toEqual([
+      bytes(HWW_INFO),
+      bytes(HWW_REQ_RESET),
+      bytes(HWW_REQ_RESET),
+      bytes(HWW_REQ_RESET),
+    ]);
+  });
+
+  it.each([
+    ['empty', bytes()],
+    ['NACK', bytes(HWW_RSP_NACK)],
+    ['NOTREADY', bytes(HWW_RSP_NOTREADY)],
+    ['unknown opcode', bytes(0xff)],
+    ['ACK with payload', bytes(HWW_RSP_ACK, 0x00)],
+    ['BUSY with payload', bytes(HWW_RSP_BUSY, 0x00)],
+  ] as const)('rejects reset response %s with resetSession', async (_name, response) => {
+    const t = new ScriptedTransport([infoResponse(), response]);
+    const sleeper = fakeSleeper();
+    await expect(HwwCommunication.create(t, sleeper)).rejects.toMatchObject({
+      code: 'resetSession',
+      message: 'unexpected session reset response',
+    });
+    expect(t.writes).toEqual([bytes(HWW_INFO), bytes(HWW_REQ_RESET)]);
+    expect(sleeper.calls).toEqual([]);
   });
 });
 

@@ -52,29 +52,34 @@ function hidFrom(nav: unknown): HID {
   return h;
 }
 
-/**
- * Open a BitBox02 over WebHID. Behavior mirrors
- * `bitbox-api-rs/pkg/webhid.js` byte-for-byte: permission-first listing,
- * fall back to a user prompt, product-name sanity check, close-guard that
- * fires exactly once across `close()` and the global disconnect event.
- * @internal
- */
+/** @internal */
 export async function openWebHID(
   onCloseCb?: () => void,
   hid: HID = hidFrom(globalThis.navigator),
 ): Promise<LowerTransport> {
   const filters: HIDFilter[] = [{ vendorId: VENDOR_ID, productId: PRODUCT_ID }];
 
-  let devices = await hid.getDevices({ filters });
-  if (devices.length === 0) {
-    devices = await hid.requestDevice({ filters });
-  }
-  const device = devices[0];
-  if (device === undefined || !device.productName.includes(BITBOX02_PRODUCT_PREFIX)) {
-    throw new TransportError('webhid', 'no BitBox02 found');
+  let device: HIDDevice | undefined;
+  try {
+    let devices = await hid.getDevices({ filters });
+    if (devices.length === 0) {
+      devices = await hid.requestDevice({ filters });
+    }
+    device = devices[0];
+  } catch {
+    throw new TransportError('webhid-cancel', 'no BitBox02 selected');
   }
 
-  await device.open();
+  if (device === undefined || !device.productName.includes(BITBOX02_PRODUCT_PREFIX)) {
+    throw new TransportError('webhid-cancel', 'no BitBox02 selected');
+  }
+
+  try {
+    await device.open();
+  } catch (err) {
+    const reason = err instanceof Error && err.message ? `: ${err.message}` : '';
+    throw new TransportError('webhid', `failed to open HID device${reason}`);
+  }
 
   const queue = new MessageQueue();
   const guard = makeCloseGuard(onCloseCb);

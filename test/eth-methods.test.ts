@@ -3,6 +3,7 @@
 import { create } from '@bufbuild/protobuf';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { sha256 } from '@noble/hashes/sha256';
+import { utf8ToBytes as utf8 } from '@noble/hashes/utils';
 import { describe, expect, it } from 'vitest';
 import {
   AntiKleptoSignerCommitmentSchema,
@@ -15,7 +16,7 @@ import {
   ETHTypedMessageValueResponseSchema,
   ETHTypedMessageValueResponse_RootObject as RootObject,
 } from '../src/proto/gen/eth_pb.js';
-import { taggedSha256 } from '../src/internal/eth/antiklepto.js';
+import { taggedSha256 } from '../src/internal/antiklepto.js';
 import {
   ethAddress,
   ethSign1559Transaction,
@@ -26,28 +27,11 @@ import {
 } from '../src/internal/eth/methods.js';
 import type { Eth1559Transaction, EthTransaction } from '../src/index.js';
 import type { Info } from '../src/internal/hww.js';
+import { bytesToBigIntBE } from '../src/internal/utils.js';
 import { ScriptedChannel } from './eth-fake-channel.js';
+import { bigIntToBytes32BE } from './utils.js';
 
-const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s);
 const UINT64_MAX = (1n << 64n) - 1n;
-
-function bytesToBigIntBE(bytes: Uint8Array): bigint {
-  let n = 0n;
-  for (const b of bytes) {
-    n = (n << 8n) | BigInt(b);
-  }
-  return n;
-}
-
-function bigIntToBytes32BE(n: bigint): Uint8Array {
-  const out = new Uint8Array(32);
-  let v = n;
-  for (let i = 31; i >= 0; i -= 1) {
-    out[i] = Number(v & 0xffn);
-    v >>= 8n;
-  }
-  return out;
-}
 
 type ProjectivePoint = typeof secp256k1.ProjectivePoint.BASE;
 
@@ -129,7 +113,8 @@ describe('ethAddress', () => {
   it('rejects chainId outside uint64', async () => {
     const channel = new ScriptedChannel([]);
     await expect(ethAddress(channel, 1n << 64n, [0], false)).rejects.toMatchObject({
-      code: 'invalid-input',
+      code: 'invalid-type',
+      message: 'invalid JavaScript type: chainId',
     });
   });
 });
@@ -206,9 +191,13 @@ describe('ethSignTransaction (dynamic antiklepto)', () => {
       data: new Uint8Array(0),
     };
     const sig = await ethSignTransaction(channel as any, info('9.26.0'), 1n, [0], tx, undefined);
-    expect(Array.from(sig.v)).toEqual([1 + 27 + 1 * 2 + 8]); // 38
+    expect(sig.v).toEqual([1 + 27 + 1 * 2 + 8]); // 38
     expect(sig.r.length).toBe(32);
     expect(sig.s.length).toBe(32);
+    expect(Array.isArray(sig.r)).toBe(true);
+    expect(Array.isArray(sig.s)).toBe(true);
+    expect(Array.isArray(sig.v)).toBe(true);
+    expect(JSON.parse(JSON.stringify(sig))).toEqual(sig);
   });
 
   it('legacy v shaping: chainId=17000 recid=0 → v big-endian without leading zeros', async () => {
@@ -249,7 +238,7 @@ describe('ethSignTransaction (dynamic antiklepto)', () => {
     };
     const sig = await ethSignTransaction(channel as any, info('9.26.0'), 17000n, [0], tx, undefined);
     // v = 0 + 27 + 17000*2 + 8 = 34035 = 0x84F3
-    expect(Array.from(sig.v)).toEqual([0x84, 0xf3]);
+    expect(sig.v).toEqual([0x84, 0xf3]);
   });
 
   it('rejects chainId outside uint64', async () => {
@@ -264,7 +253,10 @@ describe('ethSignTransaction (dynamic antiklepto)', () => {
     };
     await expect(
       ethSignTransaction(channel, info('9.26.0'), 1n << 64n, [0], tx, undefined),
-    ).rejects.toMatchObject({ code: 'invalid-input' });
+    ).rejects.toMatchObject({
+      code: 'invalid-type',
+      message: 'invalid JavaScript type: chainId',
+    });
   });
 
   it('rejects a legacy v value that would overflow uint64', async () => {
@@ -327,7 +319,10 @@ describe('ethSignTransaction (dynamic antiklepto)', () => {
 
     await expect(
       ethSignTransaction(channel, info('9.26.0'), 1n, [0], tx, undefined),
-    ).rejects.toMatchObject({ code: 'invalid-input' });
+    ).rejects.toMatchObject({
+      code: 'invalid-type',
+      message: 'invalid JavaScript type: wrong type for EthTransaction',
+    });
     expect(channel.seen).toHaveLength(0);
   });
 
@@ -494,7 +489,7 @@ describe('ethSign1559Transaction', () => {
       data: new Uint8Array(0),
     };
     const sig = await ethSign1559Transaction(channel as any, info('9.26.0'), [0], tx, undefined);
-    expect(Array.from(sig.v)).toEqual([1]);
+    expect(sig.v).toEqual([1]);
   });
 
   it('rejects firmware <9.16.0', async () => {
@@ -529,7 +524,10 @@ describe('ethSign1559Transaction', () => {
 
     await expect(
       ethSign1559Transaction(channel, info('9.26.0'), [0], tx, undefined),
-    ).rejects.toMatchObject({ code: 'invalid-input' });
+    ).rejects.toMatchObject({
+      code: 'invalid-type',
+      message: 'invalid JavaScript type: wrong type for Eth1559Transaction',
+    });
     expect(channel.seen).toHaveLength(0);
   });
 
@@ -548,7 +546,10 @@ describe('ethSign1559Transaction', () => {
 
     await expect(
       ethSign1559Transaction(channel, info('9.26.0'), [0], tx, undefined),
-    ).rejects.toMatchObject({ code: 'invalid-input' });
+    ).rejects.toMatchObject({
+      code: 'invalid-type',
+      message: 'invalid JavaScript type: wrong type for Eth1559Transaction',
+    });
     expect(channel.seen).toHaveLength(0);
   });
 });
@@ -585,7 +586,7 @@ describe('ethSignMessage', () => {
     });
 
     const sig = await ethSignMessage(channel as any, info('9.26.0'), 1n, [0], utf8('hello'));
-    expect(Array.from(sig.v)).toEqual([1 + 27]);
+    expect(sig.v).toEqual([1 + 27]);
   });
 });
 
@@ -676,7 +677,7 @@ describe('ethSignTypedMessage', () => {
       TYPED_MSG,
       true,
     );
-    expect(Array.from(sig.v)).toEqual([0 + 27]);
+    expect(sig.v).toEqual([0 + 27]);
   });
 
   it('rejects useAntiklepto=false on firmware <9.26.0', async () => {
@@ -684,6 +685,30 @@ describe('ethSignTypedMessage', () => {
     await expect(
       ethSignTypedMessage(channel, info('9.25.0'), 1n, [0], TYPED_MSG, false),
     ).rejects.toMatchObject({ code: 'version' });
+  });
+
+  it('accepts recovery IDs up to 3 when antiklepto is disabled', async () => {
+    const signature = new Uint8Array(65);
+    signature.set(bigIntToBytes32BE(1n), 0);
+    signature.set(bigIntToBytes32BE(1n), 32);
+    signature[64] = 3;
+    const channel = new DynamicEthChannel((req) => {
+      expect(req.case).toBe('signTypedMsg');
+      return {
+        case: 'sign',
+        value: create(ETHSignResponseSchema, { signature }),
+      };
+    });
+
+    const result = await ethSignTypedMessage(
+      channel as any,
+      info('9.26.0'),
+      1n,
+      [0],
+      TYPED_MSG,
+      false,
+    );
+    expect(result.v).toEqual([3 + 27]);
   });
 
   it('rejects firmware <9.12.0', async () => {
@@ -702,6 +727,14 @@ describe('ethSignTypedMessage', () => {
 
     await expect(
       ethSignTypedMessage(channel, info('9.26.0'), 1n, [0], msg, true),
+    ).rejects.toMatchObject({ code: 'eth-typed-message' });
+    expect(channel.seen).toHaveLength(0);
+  });
+
+  it('rejects JSON strings before querying', async () => {
+    const channel = new ScriptedChannel([]);
+    await expect(
+      ethSignTypedMessage(channel, info('9.26.0'), 1n, [0], JSON.stringify(TYPED_MSG), true),
     ).rejects.toMatchObject({ code: 'eth-typed-message' });
     expect(channel.seen).toHaveLength(0);
   });

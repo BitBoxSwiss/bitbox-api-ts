@@ -1,42 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { FormEvent, useState } from 'react';
-import * as bitbox from 'bitbox-api-ts';
+import * as bitbox from '@bitboxswiss/bitbox-api';
 
 import { ErrorNotification } from './ErrorNotification';
+import { ResultBlock, formatResult, hexToBytes } from './form-utils';
 
 type Props = { bb02: bitbox.PairedBitBox };
 
-function hexToBytes(hex: string): Uint8Array {
-  const body = hex.startsWith('0x') || hex.startsWith('0X') ? hex.slice(2) : hex;
-  if (body.length % 2 !== 0) {
-    throw new Error(`invalid hex length: ${hex}`);
-  }
-  const out = new Uint8Array(body.length / 2);
-  for (let i = 0; i < out.length; i += 1) {
-    const byte = Number.parseInt(body.slice(i * 2, i * 2 + 2), 16);
-    if (Number.isNaN(byte)) {
-      throw new Error(`invalid hex digit in ${hex}`);
-    }
-    out[i] = byte;
-  }
-  return out;
-}
-
 function stringToBytes(s: string): Uint8Array {
   return new TextEncoder().encode(s);
-}
-
-function ResultBlock({ value }: { value: string }) {
-  if (value === '') {
-    return null;
-  }
-  return (
-    <div className="resultContainer">
-      <label>Result</label>
-      <textarea rows={Math.min(value.split('\n').length + 2, 32)} readOnly defaultValue={value} />
-    </div>
-  );
 }
 
 function EthXPub({ bb02 }: Props) {
@@ -199,7 +172,7 @@ function EthSignTransaction({ bb02 }: Props) {
         <label>Transaction</label>
         <textarea value={txJson} onChange={e => setTxJson(e.target.value)} rows={9} />
         <button type="submit" disabled={running}>Sign transaction</button>
-        <ResultBlock value={result ? JSON.stringify(result, replaceUint8Arrays, 2) : ''} />
+        <ResultBlock value={formatResult(result)} />
         {err !== undefined && (
           <ErrorNotification message={err.message} code={err.code} onClose={() => setErr(undefined)} />
         )}
@@ -270,7 +243,7 @@ function EthSign1559Transaction({ bb02 }: Props) {
         <label>Transaction</label>
         <textarea value={txJson} onChange={e => setTxJson(e.target.value)} rows={9} />
         <button type="submit" disabled={running}>Sign EIP-1559 transaction</button>
-        <ResultBlock value={result ? JSON.stringify(result, replaceUint8Arrays, 2) : ''} />
+        <ResultBlock value={formatResult(result)} />
         {err !== undefined && (
           <ErrorNotification message={err.message} code={err.code} onClose={() => setErr(undefined)} />
         )}
@@ -320,7 +293,7 @@ function EthSignMessage({ bb02 }: Props) {
         <label>Message</label>
         <textarea value={msg} onChange={e => setMsg(e.target.value)} rows={4} />
         <button type="submit" disabled={running}>Sign message</button>
-        <ResultBlock value={result ? JSON.stringify(result, replaceUint8Arrays, 2) : ''} />
+        <ResultBlock value={formatResult(result)} />
         {err !== undefined && (
           <ErrorNotification message={err.message} code={err.code} onClose={() => setErr(undefined)} />
         )}
@@ -417,20 +390,13 @@ function EthSignTypedMessage({ bb02 }: Props) {
         <label>EIP-712 typed message</label>
         <textarea value={msg} onChange={e => setMsg(e.target.value)} rows={20} />
         <button type="submit" disabled={running}>Sign typed message</button>
-        <ResultBlock value={result ? JSON.stringify(result, replaceUint8Arrays, 2) : ''} />
+        <ResultBlock value={formatResult(result)} />
         {err !== undefined && (
           <ErrorNotification message={err.message} code={err.code} onClose={() => setErr(undefined)} />
         )}
       </form>
     </div>
   );
-}
-
-function replaceUint8Arrays(_key: string, value: unknown): unknown {
-  if (value instanceof Uint8Array) {
-    return Array.from(value, b => b.toString(16).padStart(2, '0')).join('');
-  }
-  return value;
 }
 
 const STREAMING_THRESHOLD = 6144;
@@ -507,7 +473,7 @@ function EthSign1559TransactionStreaming({ bb02 }: Props) {
           />
         </label>
         <button type="submit" disabled={running}>Sign streaming transaction</button>
-        <ResultBlock value={result ? JSON.stringify(result, replaceUint8Arrays, 2) : ''} />
+        <ResultBlock value={formatResult(result)} />
         {err !== undefined && (
           <ErrorNotification message={err.message} code={err.code} onClose={() => setErr(undefined)} />
         )}
@@ -583,7 +549,7 @@ function EthSignTypedMessageStreaming({ bb02 }: Props) {
           />
         </label>
         <button type="submit" disabled={running}>Sign streaming typed message</button>
-        <ResultBlock value={result ? JSON.stringify(result, replaceUint8Arrays, 2) : ''} />
+        <ResultBlock value={formatResult(result)} />
         {err !== undefined && (
           <ErrorNotification message={err.message} code={err.code} onClose={() => setErr(undefined)} />
         )}

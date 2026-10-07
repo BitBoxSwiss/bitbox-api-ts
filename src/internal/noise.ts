@@ -4,9 +4,10 @@ import { x25519 } from '@noble/curves/ed25519';
 import { chacha20poly1305 } from '@noble/ciphers/chacha';
 import { sha256 } from '@noble/hashes/sha256';
 import { hkdf } from '@noble/hashes/hkdf';
+import { concatBytes, utf8ToBytes } from './utils.js';
 
 const PROTOCOL_NAME = 'Noise_XX_25519_ChaChaPoly_SHA256';
-const PROTOCOL_NAME_BYTES = new TextEncoder().encode(PROTOCOL_NAME);
+const PROTOCOL_NAME_BYTES = utf8ToBytes(PROTOCOL_NAME);
 
 const DHLEN = 32;
 const HASHLEN = 32;
@@ -24,19 +25,32 @@ interface KeyPair {
   publicKey: Uint8Array;
 }
 
+/** @internal */
+export class NoiseProtocolError extends Error {
+  readonly code = 'noise';
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+function noiseError(message: string): NoiseProtocolError {
+  return new NoiseProtocolError(message);
+}
+
 function keyPairFromPrivateKey(privateKey: Uint8Array): KeyPair {
-  return { privateKey, publicKey: x25519.getPublicKey(privateKey) };
+  try {
+    return { privateKey, publicKey: x25519.getPublicKey(privateKey) };
+  } catch {
+    throw noiseError('invalid Noise private key');
+  }
 }
 
 function dh(local: KeyPair, remotePub: Uint8Array): Uint8Array {
-  return x25519.getSharedSecret(local.privateKey, remotePub);
-}
-
-function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
-  const out = new Uint8Array(a.length + b.length);
-  out.set(a, 0);
-  out.set(b, a.length);
-  return out;
+  try {
+    return x25519.getSharedSecret(local.privateKey, remotePub);
+  } catch {
+    throw noiseError('Noise DH failed');
+  }
 }
 
 function nonce96(n: bigint): Uint8Array {
@@ -74,7 +88,12 @@ export class CipherState {
     if (this.k === undefined) {
       return plaintext;
     }
-    const ct = chacha20poly1305(this.k, nonce96(this.n), ad).encrypt(plaintext);
+    let ct: Uint8Array;
+    try {
+      ct = chacha20poly1305(this.k, nonce96(this.n), ad).encrypt(plaintext);
+    } catch {
+      throw noiseError('noise encryption failed');
+    }
     this.n += 1n;
     return ct;
   }
@@ -83,7 +102,12 @@ export class CipherState {
     if (this.k === undefined) {
       return ciphertext;
     }
-    const pt = chacha20poly1305(this.k, nonce96(this.n), ad).decrypt(ciphertext);
+    let pt: Uint8Array;
+    try {
+      pt = chacha20poly1305(this.k, nonce96(this.n), ad).decrypt(ciphertext);
+    } catch {
+      throw noiseError('noise decryption failed');
+    }
     this.n += 1n;
     return pt;
   }
@@ -106,7 +130,7 @@ class SymmetricState {
   }
 
   mixHash(data: Uint8Array): void {
-    this.h = sha256(concat(this.h, data));
+    this.h = sha256(concatBytes(this.h, data));
   }
 
   mixKey(ikm: Uint8Array): void {
@@ -188,15 +212,15 @@ export class NoiseXX {
       if (tok === 'e') {
         const sk = this.fixedEphemeralPrivateKey ?? x25519.utils.randomPrivateKey();
         this.e = keyPairFromPrivateKey(sk);
-        buf = concat(buf, this.e.publicKey);
+        buf = concatBytes(buf, this.e.publicKey);
         this.symmetric.mixHash(this.e.publicKey);
       } else if (tok === 's') {
-        buf = concat(buf, this.symmetric.encryptAndHash(this.s.publicKey));
+        buf = concatBytes(buf, this.symmetric.encryptAndHash(this.s.publicKey));
       } else {
         this.symmetric.mixKey(this.tokenDh(tok));
       }
     }
-    buf = concat(buf, this.symmetric.encryptAndHash(EMPTY));
+    buf = concatBytes(buf, this.symmetric.encryptAndHash(EMPTY));
     this.patternIndex += 1;
     return buf;
   }
@@ -216,7 +240,7 @@ export class NoiseXX {
     for (const tok of tokens) {
       if (tok === 'e') {
         if (message.length - cursor < DHLEN) {
-          throw new Error('handshake message truncated at remote ephemeral key');
+          throw noiseError('handshake message truncated at remote ephemeral key');
         }
         this.re = message.slice(cursor, cursor + DHLEN);
         cursor += DHLEN;
@@ -224,7 +248,7 @@ export class NoiseXX {
       } else if (tok === 's') {
         const len = this.symmetric.hasCipherKey() ? DHLEN + TAGLEN : DHLEN;
         if (message.length - cursor < len) {
-          throw new Error('handshake message truncated at remote static key');
+          throw noiseError('handshake message truncated at remote static key');
         }
         const slice = message.slice(cursor, cursor + len);
         cursor += len;
@@ -281,5 +305,9 @@ export function generateStaticPrivateKey(): Uint8Array {
 
 /** Derive the public key for an x25519 private key. @internal */
 export function publicKeyFromPrivateKey(privateKey: Uint8Array): Uint8Array {
-  return x25519.getPublicKey(privateKey);
+  try {
+    return x25519.getPublicKey(privateKey);
+  } catch {
+    throw noiseError('invalid Noise private key');
+  }
 }

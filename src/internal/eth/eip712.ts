@@ -12,13 +12,20 @@ import {
   type ETHSignTypedMessageRequest_StructType,
   type ETHTypedMessageValueResponse,
 } from '../../proto/gen/eth_pb.js';
+import { ethTypedMessageError } from '../errors.js';
+import {
+  bigIntToSignedBytesBE,
+  bigUintToBytesBE,
+  hexToBytes,
+  utf8ToBytes,
+} from '../utils.js';
 
 export { DataType };
 
 export class TypedMessageError extends Error {
   readonly code = 'eth-typed-message';
-  constructor(message: string) {
-    super(message);
+  constructor(detail: string) {
+    super(ethTypedMessageError(detail).message);
   }
 }
 
@@ -57,39 +64,18 @@ function parseTypes(input: unknown): Record<string, Eip712TypeMember[]> {
   return types;
 }
 
-function hexNibble(char: number): number {
-  if (char >= 0x30 && char <= 0x39) {
-    return char - 0x30;
-  }
-  if (char >= 0x41 && char <= 0x46) {
-    return char - 0x37;
-  }
-  if (char >= 0x61 && char <= 0x66) {
-    return char - 0x57;
-  }
-  return -1;
-}
-
 export function parseEip712Message(input: unknown): Eip712Message {
-  let parsed: unknown = input;
-  if (typeof input === 'string') {
-    try {
-      parsed = JSON.parse(input);
-    } catch {
-      throw new TypedMessageError('Could not parse EIP-712 JSON message');
-    }
-  }
-  if (!isRecord(parsed) || typeof parsed.primaryType !== 'string') {
+  if (!isRecord(input) || typeof input.primaryType !== 'string') {
     throw new TypedMessageError('Could not parse EIP-712 JSON message');
   }
-  if (!isRecord(parsed.domain) || !isRecord(parsed.message)) {
+  if (!isRecord(input.domain) || !isRecord(input.message)) {
     throw new TypedMessageError('Could not parse EIP-712 JSON message');
   }
   return {
-    types: parseTypes(parsed.types),
-    primaryType: parsed.primaryType,
-    domain: parsed.domain,
-    message: parsed.message,
+    types: parseTypes(input.types),
+    primaryType: input.primaryType,
+    domain: input.domain,
+    message: input.message,
   };
 }
 
@@ -194,64 +180,11 @@ export function buildStructTypes(
 }
 
 function decodeHex(s: string): Uint8Array {
-  const body = s.slice(2);
-  if (body.length % 2 !== 0) {
+  try {
+    return hexToBytes(s.slice(2));
+  } catch {
     throw new TypedMessageError(`invalid hex: ${s}`);
   }
-  const out = new Uint8Array(body.length / 2);
-  for (let i = 0; i < out.length; i += 1) {
-    const hi = body.charCodeAt(i * 2);
-    const lo = body.charCodeAt(i * 2 + 1);
-    const a = hexNibble(hi);
-    const b = hexNibble(lo);
-    if (a < 0 || a > 15 || b < 0 || b > 15) {
-      throw new TypedMessageError(`invalid hex: ${s}`);
-    }
-    out[i] = (a << 4) | b;
-  }
-  return out;
-}
-
-function bigUintToBytesBE(n: bigint): Uint8Array {
-  if (n < 0n) {
-    throw new TypedMessageError('expected non-negative integer');
-  }
-  if (n === 0n) {
-    return new Uint8Array(0);
-  }
-  const bytes: number[] = [];
-  let v = n;
-  while (v > 0n) {
-    bytes.unshift(Number(v & 0xffn));
-    v >>= 8n;
-  }
-  return new Uint8Array(bytes);
-}
-
-function bigIntToSignedBytesBE(n: bigint): Uint8Array {
-  if (n === 0n) {
-    return new Uint8Array([0]);
-  }
-  if (n > 0n) {
-    const bytes: number[] = [];
-    let v = n;
-    while (v > 0n) {
-      bytes.unshift(Number(v & 0xffn));
-      v >>= 8n;
-    }
-    if ((bytes[0]! & 0x80) !== 0) {
-      bytes.unshift(0);
-    }
-    return new Uint8Array(bytes);
-  }
-  // Negative: two's complement, smallest big-endian.
-  let v = n;
-  const bytes: number[] = [];
-  while (v !== -1n || bytes.length === 0 || (bytes[0]! & 0x80) === 0) {
-    bytes.unshift(Number(v & 0xffn));
-    v >>= 8n;
-  }
-  return new Uint8Array(bytes);
 }
 
 function parseUintValue(value: unknown): bigint {
@@ -314,7 +247,7 @@ export function encodeValue(
       if (value.startsWith('0x') || value.startsWith('0X')) {
         return decodeHex(value);
       }
-      return new TextEncoder().encode(value);
+      return utf8ToBytes(value);
     }
     case DataType.UINT: {
       const n = parseUintValue(value);
@@ -342,7 +275,7 @@ export function encodeValue(
       if (typeof value !== 'string') {
         throw new TypedMessageError('Expected a string value');
       }
-      return new TextEncoder().encode(value);
+      return utf8ToBytes(value);
     }
     case DataType.ARRAY: {
       if (!Array.isArray(value)) {

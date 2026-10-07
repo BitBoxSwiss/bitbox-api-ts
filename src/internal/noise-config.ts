@@ -1,12 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
-/**
- * Persistent state for the Noise pairing layer. Stored shape mirrors the Rust
- * `bitbox-api` package (snake_case, byte arrays as JSON integer arrays) so that
- * existing browser users upgrading from the WASM package keep their pairing
- * cache.
- * @internal
- */
+import { noiseConfigError } from './errors.js';
+
+/** Persistent state for the Noise pairing layer. @internal */
 export interface NoiseConfigData {
   appStaticPrivkey?: Uint8Array;
   deviceStaticPubkeys: Uint8Array[];
@@ -42,13 +38,13 @@ function toJson(data: NoiseConfigData): string {
 function fromJson(text: string): NoiseConfigData {
   const parsed = JSON.parse(text) as unknown;
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('noise config must be an object');
+    throw new Error('must be an object');
   }
   const shape = parsed as Partial<SerializedShape>;
   const privkey = shape.app_static_privkey ?? null;
   const pubkeys = shape.device_static_pubkeys;
   if (!Array.isArray(pubkeys)) {
-    throw new Error('noise config device_static_pubkeys must be an array');
+    throw new Error('device_static_pubkeys must be an array');
   }
   return {
     ...(privkey === null ? {} : { appStaticPrivkey: bytesFromArray(privkey, 'app_static_privkey') }),
@@ -58,17 +54,17 @@ function fromJson(text: string): NoiseConfigData {
 
 function bytesFromArray(value: unknown, field: string): Uint8Array {
   if (!Array.isArray(value) || value.length !== 32) {
-    throw new Error(`noise config ${field} must be a 32-byte integer array`);
+    throw new Error(`${field} must be a 32-byte integer array`);
   }
   for (const byte of value) {
     if (!Number.isInteger(byte) || byte < 0 || byte > 0xff) {
-      throw new Error(`noise config ${field} contains an invalid byte`);
+      throw new Error(`${field} contains an invalid byte`);
     }
   }
   return Uint8Array.from(value);
 }
 
-function eqBytes(a: Uint8Array, b: Uint8Array): boolean {
+function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) {
     return false;
   }
@@ -82,7 +78,7 @@ function eqBytes(a: Uint8Array, b: Uint8Array): boolean {
 
 /** @internal */
 export function containsDeviceStaticPubkey(data: NoiseConfigData, pubkey: Uint8Array): boolean {
-  return data.deviceStaticPubkeys.some((known) => eqBytes(known, pubkey));
+  return data.deviceStaticPubkeys.some((known) => bytesEqual(known, pubkey));
 }
 
 /** @internal */
@@ -141,9 +137,8 @@ interface StorageLike {
 
 /**
  * Browser-default config. Uses the `Storage`-shaped `localStorage` global; on a
- * missing key it starts from an empty config. Malformed persisted JSON and
- * storage access failures propagate to the caller so pairing state is not
- * silently replaced.
+ * missing key, malformed persisted JSON, or storage read failure it starts from
+ * an empty config, matching the wasm package behavior.
  * @internal
  */
 export class LocalStorageNoiseConfig implements NoiseConfig {
@@ -160,27 +155,45 @@ export class LocalStorageNoiseConfig implements NoiseConfig {
   }
 
   read(): NoiseConfigData {
-    const raw = this.storage.getItem(this.key);
-    if (raw === null) {
+    try {
+      const raw = this.storage.getItem(this.key);
+      if (raw === null) {
+        return emptyConfig();
+      }
+      return fromJson(raw);
+    } catch {
       return emptyConfig();
     }
-    return fromJson(raw);
   }
 
   store(data: NoiseConfigData): void {
-    this.storage.setItem(this.key, toJson(data));
+    try {
+      this.storage.setItem(this.key, toJson(data));
+    } catch {
+      throw noiseConfigError('could not write to localstorage');
+    }
   }
 }
 
 /**
- * Default config used by browser connect functions: localStorage-backed if a
- * `localStorage` global is present, otherwise an in-memory no-cache fallback.
+ * Default config used by browser connect functions: localStorage-backed if
+ * available, otherwise a module-scoped in-memory fallback. The fallback keeps
+ * pairing trust for the lifetime of the current JS runtime, which avoids
+ * repeated pairing prompts in browser contexts without localStorage while still
+ * leaving explicit `NoiseConfigNoCache` available for tests and callers.
  * @internal
  */
+const fallbackDefaultConfig = new InMemoryNoiseConfig();
+
 export function defaultNoiseConfig(): NoiseConfig {
-  const ls = (globalThis as { localStorage?: StorageLike }).localStorage;
+  let ls: StorageLike | undefined;
+  try {
+    ls = (globalThis as { localStorage?: StorageLike }).localStorage;
+  } catch {
+    ls = undefined;
+  }
   if (ls !== undefined) {
     return new LocalStorageNoiseConfig(ls);
   }
-  return new NoiseConfigNoCache();
+  return fallbackDefaultConfig;
 }

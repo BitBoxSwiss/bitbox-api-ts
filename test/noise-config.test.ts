@@ -8,6 +8,7 @@ import {
   NoiseConfigNoCache,
   addDeviceStaticPubkey,
   containsDeviceStaticPubkey,
+  defaultNoiseConfig,
 } from '../src/internal/noise-config.js';
 
 class FakeStorage {
@@ -105,23 +106,27 @@ describe('LocalStorageNoiseConfig', () => {
     expect(back.deviceStaticPubkeys).toEqual([]);
   });
 
-  it('throws when the stored JSON is malformed', () => {
+  it('returns an empty config when the stored JSON is malformed', () => {
     const fake = new FakeStorage();
     fake.setItem(LOCAL_STORAGE_CONFIG_KEY, '{ not json');
-    expect(() => new LocalStorageNoiseConfig(fake).read()).toThrow();
+    const back = new LocalStorageNoiseConfig(fake).read();
+    expect(back.appStaticPrivkey).toBeUndefined();
+    expect(back.deviceStaticPubkeys).toEqual([]);
   });
 
-  it('throws when getItem throws', () => {
+  it('returns an empty config when getItem throws', () => {
     const c = new LocalStorageNoiseConfig({
       getItem(): string | null {
         throw new Error('storage disabled');
       },
       setItem(): void {},
     });
-    expect(() => c.read()).toThrow(/storage disabled/);
+    const back = c.read();
+    expect(back.appStaticPrivkey).toBeUndefined();
+    expect(back.deviceStaticPubkeys).toEqual([]);
   });
 
-  it('throws when persisted byte arrays do not contain exactly bytes', () => {
+  it('returns an empty config when persisted byte arrays are malformed', () => {
     const fake = new FakeStorage();
     fake.setItem(
       LOCAL_STORAGE_CONFIG_KEY,
@@ -130,7 +135,9 @@ describe('LocalStorageNoiseConfig', () => {
         device_static_pubkeys: [],
       }),
     );
-    expect(() => new LocalStorageNoiseConfig(fake).read()).toThrow(/32-byte/);
+    let back = new LocalStorageNoiseConfig(fake).read();
+    expect(back.appStaticPrivkey).toBeUndefined();
+    expect(back.deviceStaticPubkeys).toEqual([]);
 
     fake.setItem(
       LOCAL_STORAGE_CONFIG_KEY,
@@ -139,21 +146,39 @@ describe('LocalStorageNoiseConfig', () => {
         device_static_pubkeys: [Array.from({ length: 32 }, () => 256)],
       }),
     );
-    expect(() => new LocalStorageNoiseConfig(fake).read()).toThrow(/invalid byte/);
+    back = new LocalStorageNoiseConfig(fake).read();
+    expect(back.appStaticPrivkey).toBeUndefined();
+    expect(back.deviceStaticPubkeys).toEqual([]);
   });
 
-  it('round-trips bitbox-api-rs-formatted JSON for migration compatibility', () => {
+  it('throws noise-config when storage writes fail', () => {
+    const c = new LocalStorageNoiseConfig({
+      getItem(): string | null {
+        return null;
+      },
+      setItem(): void {
+        throw new Error('quota');
+      },
+    });
+    expect(() => c.store({ deviceStaticPubkeys: [] })).toThrow(
+      expect.objectContaining({
+        code: 'noise-config',
+        message: 'noise config error: could not write to localstorage',
+      }),
+    );
+  });
+
+  it('round-trips legacy JSON for migration compatibility', () => {
     const fake = new FakeStorage();
-    // Shape exactly as serde_json produces from the Rust NoiseConfigData.
-    const rustShape = {
+    const legacyShape = {
       app_static_privkey: Array.from({ length: 32 }, (_v, i) => i),
       device_static_pubkeys: [Array.from({ length: 32 }, (_v, i) => 0x80 | i)],
     };
-    fake.setItem(LOCAL_STORAGE_CONFIG_KEY, JSON.stringify(rustShape));
+    fake.setItem(LOCAL_STORAGE_CONFIG_KEY, JSON.stringify(legacyShape));
 
     const back = new LocalStorageNoiseConfig(fake).read();
-    expect(Array.from(back.appStaticPrivkey!)).toEqual(rustShape.app_static_privkey);
-    expect(Array.from(back.deviceStaticPubkeys[0]!)).toEqual(rustShape.device_static_pubkeys[0]);
+    expect(Array.from(back.appStaticPrivkey!)).toEqual(legacyShape.app_static_privkey);
+    expect(Array.from(back.deviceStaticPubkeys[0]!)).toEqual(legacyShape.device_static_pubkeys[0]);
   });
 });
 
@@ -169,5 +194,32 @@ describe('config helpers', () => {
 
     const again = addDeviceStaticPubkey(added, pk);
     expect(again).toBe(added); // same reference: no-op when already present
+  });
+
+  it('reuses an in-memory default config when localStorage is unavailable', () => {
+    const original = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+    Object.defineProperty(globalThis, 'localStorage', {
+      value: undefined,
+      configurable: true,
+    });
+    try {
+      const a = defaultNoiseConfig();
+      const b = defaultNoiseConfig();
+      expect(a).toBe(b);
+
+      const sk = new Uint8Array(32).fill(3);
+      const pk = new Uint8Array(32).fill(4);
+      a.store({ appStaticPrivkey: sk, deviceStaticPubkeys: [pk] });
+
+      const back = b.read();
+      expect(back.appStaticPrivkey).toEqual(sk);
+      expect(back.deviceStaticPubkeys).toEqual([pk]);
+    } finally {
+      if (original === undefined) {
+        delete (globalThis as { localStorage?: unknown }).localStorage;
+      } else {
+        Object.defineProperty(globalThis, 'localStorage', original);
+      }
+    }
   });
 });

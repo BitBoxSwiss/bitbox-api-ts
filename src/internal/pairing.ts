@@ -12,6 +12,7 @@ import {
   containsDeviceStaticPubkey,
   type NoiseConfig,
 } from './noise-config.js';
+import { CODE_UNEXPECTED_RESPONSE, makeError } from './errors.js';
 
 /**
  * Minimal subset of `PairingTransport` the pairing layer needs. The real
@@ -37,8 +38,8 @@ const EMPTY = new Uint8Array(0);
 
 /** @internal */
 export class NoiseError extends Error {
-  readonly code: 'noise' | 'noise-pairing-rejected';
-  constructor(code: 'noise' | 'noise-pairing-rejected', message: string) {
+  readonly code: 'noise' | 'pairing-rejected';
+  constructor(code: 'noise' | 'pairing-rejected', message: string) {
     super(message);
     this.code = code;
   }
@@ -156,7 +157,7 @@ export async function completePairing(state: PairingState): Promise<EncryptedCha
   if (state.pairingCode !== undefined) {
     const verify = await state.hww.query(new Uint8Array([OP_I_CAN_HAS_PAIRIN_VERIFICASHUN]));
     if (verify.length !== 1 || verify[0] !== RESPONSE_SUCCESS) {
-      throw new NoiseError('noise-pairing-rejected', 'device rejected pairing');
+      throw new NoiseError('pairing-rejected', 'pairing code rejected by user');
     }
     const cached = state.config.read();
     const updated = addDeviceStaticPubkey(cached, state.finalState.remoteStaticPubkey);
@@ -181,7 +182,7 @@ export function makeEncryptedChannel(
       framed.set(ciphertext, 1);
       const response = await hww.query(framed);
       if (response.length < 1 || response[0] !== RESPONSE_SUCCESS) {
-        throw new NoiseError('noise', 'encrypted query response was not RESPONSE_SUCCESS');
+        throw makeError(CODE_UNEXPECTED_RESPONSE, 'BitBox returned an unexpected response');
       }
       return recv.decryptWithAd(EMPTY, response.slice(1));
     },
