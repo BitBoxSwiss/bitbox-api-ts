@@ -265,6 +265,39 @@ describe.skipIf(!ENABLED).sequential.each(simulatorCases())('simulator eth $name
     expect(bytesToHex(signatureBytes(sig1))).not.toBe(bytesToHex(signatureBytes(sig2)));
   }, 60_000);
 
+  it('ethSignTypedMessage preserves signed integer values', async () => {
+    const msg = {
+      types: {
+        EIP712Domain: [{ name: 'name', type: 'string' }],
+        SignedIntegers: [
+          { name: 'positive', type: 'int16' },
+          { name: 'negative', type: 'int8' },
+          { name: 'zero', type: 'int8' },
+        ],
+      },
+      primaryType: 'SignedIntegers',
+      domain: { name: 'Signed integers' },
+      message: { positive: 128, negative: -128, zero: 0 },
+    };
+    const sig = await paired!.ethSignTypedMessage(1n, ETH_KEYPATH, msg, true);
+    expect(signatureBytes(sig)).toHaveLength(65);
+
+    // Compute the EIP-712 digest independently of the wire encoder. The device
+    // must sign +128, -128 and zero, not reinterpret or reject their sign bytes.
+    const domainHash = keccak_256(concatBytes(
+      keccak_256(utf8ToBytes('EIP712Domain(string name)')),
+      keccak_256(utf8ToBytes('Signed integers')),
+    ));
+    const messageHash = keccak_256(concatBytes(
+      keccak_256(utf8ToBytes('SignedIntegers(int16 positive,int8 negative,int8 zero)')),
+      concatBytes(new Uint8Array(31), new Uint8Array([0x80])),
+      concatBytes(new Uint8Array(31).fill(0xff), new Uint8Array([0x80])),
+      new Uint8Array(32),
+    ));
+    const digest = keccak_256(concatBytes(new Uint8Array([0x19, 0x01]), domainHash, messageHash));
+    expectSignatureFromSimulatorAddress(digest, sig);
+  }, 60_000);
+
   it.skipIf(!atLeast926)('ethSignTypedMessage with anti-klepto disabled is deterministic', async () => {
     const sig1 = await paired!.ethSignTypedMessage(1n, ETH_KEYPATH, EIP712_MSG, false);
     const sig2 = await paired!.ethSignTypedMessage(1n, ETH_KEYPATH, EIP712_MSG, false);
